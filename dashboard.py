@@ -1027,18 +1027,166 @@ def main():
             st.divider()
             
             # Create tabs for different sections
-            tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-                "🎯 Prospect Reasons Analysis",
-                "📊 Lead Status Distribution", 
+            tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+                "🎯 Quality Analysis Table",
+                "📊 Prospect Reasons Analysis",
+                "📈 Lead Status Distribution", 
                 "📚 Course Distribution",
-                "📈 Analytics Dashboard", 
+                "🔍 Analytics Dashboard", 
                 "🌍 Geographic Analysis", 
                 "📧 Email Validation",
                 "📥 Export Data"
             ])
             
-            with tab1:  # PROSPECT REASONS ANALYSIS
+            with tab1:  # QUALITY ANALYSIS TABLE
+                st.markdown("### 🎯 Lead Quality Analysis by Source & Course")
+                
+                if 'Lead Status' in df.columns:
+                    # Create aggregation by Original Source and Course
+                    # Note: Adjust these column names based on your actual HubSpot data
+                    group_cols = []
+                    
+                    # Check which columns exist
+                    if 'Original source drill-down 2' in df.columns:
+                        group_cols.append('Original source drill-down 2')
+                    elif 'hs_analytics_source_data_2' in df.columns:
+                        group_cols.append('hs_analytics_source_data_2')
+                    
+                    if 'Course/Program' in df.columns:
+                        group_cols.append('Course/Program')
+                    
+                    if group_cols:
+                        # Create pivot-like analysis
+                        analysis_data = []
+                        
+                        # Group by source and course
+                        grouped = df.groupby(group_cols + ['Lead Status']).size().reset_index(name='Count')
+                        
+                        # Get unique combinations of source and course
+                        unique_groups = df[group_cols].drop_duplicates()
+                        
+                        for _, row in unique_groups.iterrows():
+                            # Filter data for this group
+                            mask = pd.Series([True] * len(df))
+                            for col in group_cols:
+                                mask = mask & (df[col] == row[col])
+                            
+                            group_df = df[mask]
+                            
+                            if len(group_df) == 0:
+                                continue
+                            
+                            # Count each lead status
+                            status_counts = group_df['Lead Status'].value_counts().to_dict()
+                            
+                            # Calculate quality metrics
+                            not_connected = status_counts.get('Not Connected', 0)
+                            not_interested = status_counts.get('Not Interested', 0)
+                            not_qualified = status_counts.get('Not Qualified', 0)
+                            cold = status_counts.get('Cold', 0)
+                            duplicate = status_counts.get('Duplicate', 0)
+                            warm = status_counts.get('Warm', 0)
+                            hot = status_counts.get('Hot', 0)
+                            future_prospect = status_counts.get('Future Prospect', 0)
+                            
+                            low_quality = not_interested + not_qualified
+                            good_quality = warm + hot + cold
+                            grand_total = len(group_df)
+                            
+                            # Calculate percentages
+                            low_quality_pct = (low_quality / grand_total * 100) if grand_total > 0 else 0
+                            good_quality_pct = (good_quality / grand_total * 100) if grand_total > 0 else 0
+                            
+                            # Build row data
+                            row_data = {}
+                            for col in group_cols:
+                                row_data[col] = row[col]
+                            
+                            row_data.update({
+                                'Not Connected [NC]': not_connected,
+                                'Not Interested': not_interested,
+                                'Not Qualified': not_qualified,
+                                'Cold': cold,
+                                'Duplicate': duplicate,
+                                'Warm': warm,
+                                'Hot': hot,
+                                'Future Prospect': future_prospect,
+                                'Low Quality': low_quality,
+                                'Low Quality %': low_quality_pct,
+                                'Good Quality': good_quality,
+                                'Good Quality %': good_quality_pct,
+                                'Grand Total': grand_total
+                            })
+                            
+                            analysis_data.append(row_data)
+                        
+                        if analysis_data:
+                            analysis_df = pd.DataFrame(analysis_data)
+                            
+                            # Display with conditional formatting
+                            st.markdown("#### Lead Quality Breakdown")
+                            
+                            # Apply styling function
+                            def highlight_quality(row):
+                                styles = [''] * len(row)
+                                
+                                # Find Low Quality % column index
+                                if 'Low Quality %' in row.index:
+                                    low_q_idx = row.index.get_loc('Low Quality %')
+                                    if row['Low Quality %'] > 40:
+                                        styles[low_q_idx] = 'background-color: #ff4444; color: white; font-weight: bold'
+                                
+                                # Find Good Quality % column index
+                                if 'Good Quality %' in row.index:
+                                    good_q_idx = row.index.get_loc('Good Quality %')
+                                    if row['Good Quality %'] > 50:
+                                        styles[good_q_idx] = 'background-color: #38ef7d; color: white; font-weight: bold'
+                                
+                                return styles
+                            
+                            # Display styled dataframe
+                            styled_df = analysis_df.style.apply(highlight_quality, axis=1).format({
+                                'Low Quality %': '{:.1f}%',
+                                'Good Quality %': '{:.1f}%'
+                            })
+                            
+                            st.dataframe(styled_df, use_container_width=True, height=600)
+                            
+                            # Download button
+                            csv_quality = analysis_df.to_csv(index=False)
+                            st.download_button(
+                                "📥 Download Quality Analysis",
+                                csv_quality,
+                                "quality_analysis_table.csv",
+                                "text/csv",
+                                use_container_width=False
+                            )
+                            
+                            # Summary stats
+                            st.markdown("#### Summary")
+                            sum_col1, sum_col2, sum_col3 = st.columns(3)
+                            
+                            with sum_col1:
+                                avg_low_quality = analysis_df['Low Quality %'].mean()
+                                st.metric("Avg Low Quality %", f"{avg_low_quality:.1f}%")
+                            
+                            with sum_col2:
+                                avg_good_quality = analysis_df['Good Quality %'].mean()
+                                st.metric("Avg Good Quality %", f"{avg_good_quality:.1f}%")
+                            
+                            with sum_col3:
+                                high_risk_count = (analysis_df['Low Quality %'] > 40).sum()
+                                st.metric("High Risk Rows (>40% Low Quality)", high_risk_count)
+                        else:
+                            st.info("No data available for quality analysis")
+                    else:
+                        st.warning("Required columns not found. Please ensure 'Original source drill-down 2' or 'Course/Program' columns exist in your data.")
+                else:
+                    st.warning("Lead Status column not found in data")
+            
+            with tab2:  # PROSPECT REASONS ANALYSIS
                 st.markdown("### 🎯 Prospect Reasons Analysis")
+
                 
                 if st.session_state.analysis_results and 'prospect_reasons' in st.session_state.analysis_results:
                     prospect_reasons = st.session_state.analysis_results['prospect_reasons']
@@ -1091,7 +1239,7 @@ def main():
                 else:
                     st.info("No prospect reason analysis available")
             
-            with tab2:  # LEAD STATUS DISTRIBUTION
+            with tab3:  # LEAD STATUS DISTRIBUTION
                 st.markdown("### 📊 Lead Status Distribution")
                 
                 if st.session_state.analysis_results and 'lead_status_distribution' in st.session_state.analysis_results:
@@ -1148,7 +1296,7 @@ def main():
                 else:
                     st.info("No lead status analysis available")
             
-            with tab3:  # COURSE DISTRIBUTION
+            with tab4:  # COURSE DISTRIBUTION
                 st.markdown("### 📚 Course/Program Distribution")
                 
                 if st.session_state.analysis_results and 'course_distribution' in st.session_state.analysis_results:
@@ -1222,7 +1370,7 @@ def main():
                 else:
                     st.info("No course distribution analysis available")
             
-            with tab4:  # Analytics Dashboard
+            with tab5:  # Analytics Dashboard
                 st.markdown("### 📈 Comprehensive Analytics")
                 
                 if st.session_state.analysis_results and st.session_state.visualizations:
@@ -1287,7 +1435,7 @@ def main():
                         if 'completeness' in analysis:
                             st.dataframe(analysis['completeness'], use_container_width=True, height=300)
             
-            with tab5:  # Geographic Analysis
+            with tab6:  # Geographic Analysis
                 st.markdown("### 🌍 Geographic Distribution")
                 
                 if st.session_state.analysis_results:
@@ -1311,7 +1459,7 @@ def main():
                         # Country data table
                         st.dataframe(country_data, use_container_width=True, height=400)
             
-            with tab6:  # Email Validation
+            with tab7:  # Email Validation
                 st.markdown("### 📧 Email Validation")
                 
                 if st.session_state.email_validation is not None:
@@ -1342,7 +1490,7 @@ def main():
                     else:
                         st.success("✅ All emails appear valid!")
             
-            with tab7:  # Export Data
+            with tab8:  # Export Data
                 st.markdown("### 📥 Export Options")
                 
                 # First row of export buttons
