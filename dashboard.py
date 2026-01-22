@@ -303,13 +303,7 @@ def fetch_hubspot_contacts_with_date_filter(api_key, date_field, start_date, end
         "createdate", "lastmodifieddate", "hs_object_id",
         "company", "jobtitle", "country", "state", "city",
         "industry", "annualrevenue", "numemployees",
-        "website", "mobilephone", "address",
-        
-        # Add source properties for quality analysis
-        "hs_analytics_source", "hs_analytics_source_data_1", 
-        "hs_analytics_source_data_2", "original_source",
-        "hs_lead_status", "recent_conversion_date", 
-        "hs_analytics_first_timestamp", "hs_analytics_last_timestamp"
+        "website", "mobilephone", "address"
     ]
     
     try:
@@ -448,9 +442,7 @@ def process_contacts_data(contacts):
                 course_info = properties[field]
                 break
         
-        # Extract source information
-        source_data_2 = properties.get("hs_analytics_source_data_2", "")
-        
+        # Extract all prospect reasons
         processed_data.append({
             "ID": contact.get("id", ""),
             "First Name": properties.get("firstname", ""),
@@ -468,10 +460,6 @@ def process_contacts_data(contacts):
             # LEAD STATUS AND PROSPECT REASONS
             "Lead Status": properties.get("hs_lead_status", "") or properties.get("lead_status", ""),
             "Lifecycle Stage": properties.get("lifecyclestage", ""),
-            
-            # Source information for quality analysis
-            "Original source drill-down 2": properties.get("hs_analytics_source_data_2", ""),
-            "hs_analytics_source_data_2": source_data_2,
             
             # Prospect Reasons
             "Future Prospect Reasons": properties.get("future_prospect_reasons", "") or properties.get("future_prospect_reason", ""),
@@ -884,6 +872,9 @@ def main():
     with col2:  # Sidebar-like configuration
         st.markdown("## 🔧 Configuration")
         
+        # NO API KEY INPUT FIELD - Key is hidden in code
+        # The API key is already set in the HUBSPOT_API_KEY variable above
+        
         # Test connection button - uses hidden API key
         if st.button("🔗 Test API Connection", use_container_width=True):
             is_valid, message = test_hubspot_connection(HUBSPOT_API_KEY)
@@ -1047,199 +1038,87 @@ def main():
                 "📥 Export Data"
             ])
             
-            with tab1:  # QUALITY ANALYSIS TABLE - CORRECTED VERSION
+            with tab1:  # QUALITY ANALYSIS TABLE
                 st.markdown("### 🎯 Lead Quality Analysis by Source & Course")
                 
                 if 'Lead Status' in df.columns:
-                    # Prepare columns for grouping
+                    # Create aggregation by Original Source and Course
+                    # Note: Adjust these column names based on your actual HubSpot data
                     group_cols = []
                     
-                    # Check which columns exist in the data
-                    source_columns_to_check = [
-                        'Original source drill-down 2',
-                        'hs_analytics_source_data_2',
-                        'Original Source',
-                        'Lead Source',
-                        'Source'
-                    ]
-                    
-                    for col in source_columns_to_check:
-                        if col in df.columns:
-                            group_cols.append(col)
-                            break
+                    # Check which columns exist
+                    if 'Original source drill-down 2' in df.columns:
+                        group_cols.append('Original source drill-down 2')
+                    elif 'hs_analytics_source_data_2' in df.columns:
+                        group_cols.append('hs_analytics_source_data_2')
                     
                     if 'Course/Program' in df.columns:
                         group_cols.append('Course/Program')
                     
                     if group_cols:
-                        # Create a copy and normalize lead status for better matching
-                        df_copy = df.copy()
-                        df_copy['Lead_Status_Normalized'] = df_copy['Lead Status'].fillna('Unknown').astype(str)
-                        df_copy['Lead_Status_Normalized'] = df_copy['Lead_Status_Normalized'].str.strip().str.lower()
-                        
                         # Create pivot-like analysis
                         analysis_data = []
                         
-                        if len(group_cols) == 1:
-                            # If only source column, group by that
-                            grouped = df_copy.groupby(group_cols).apply(lambda x: x['Lead_Status_Normalized'].value_counts().to_dict())
-                            for source, status_counts in grouped.items():
-                                # Calculate counts
-                                not_connected = 0
-                                not_interested = 0
-                                not_qualified = 0
-                                cold = 0
-                                duplicate = 0
-                                warm = 0
-                                hot = 0
-                                future_prospect = 0
-                                other_statuses = 0
-                                
-                                for status, count in status_counts.items():
-                                    status_lower = str(status).lower()
-                                    
-                                    if 'not connected' in status_lower:
-                                        not_connected += count
-                                    elif 'not interested' in status_lower:
-                                        not_interested += count
-                                    elif 'not qualified' in status_lower:
-                                        not_qualified += count
-                                    elif 'cold' in status_lower:
-                                        cold += count
-                                    elif 'duplicate' in status_lower:
-                                        duplicate += count
-                                    elif 'warm' in status_lower:
-                                        warm += count
-                                    elif 'hot' in status_lower:
-                                        hot += count
-                                    elif 'future' in status_lower and 'prospect' in status_lower:
-                                        future_prospect += count
-                                    else:
-                                        other_statuses += count
-                                
-                                # Calculate totals
-                                low_quality = not_interested + not_qualified
-                                good_quality = warm + hot + cold
-                                grand_total = sum(status_counts.values())
-                                
-                                # Calculate percentages
-                                low_quality_pct = (low_quality / grand_total * 100) if grand_total > 0 else 0
-                                good_quality_pct = (good_quality / grand_total * 100) if grand_total > 0 else 0
-                                
-                                # Create row data
-                                row_data = {
-                                    group_cols[0]: source if isinstance(source, str) else source[0],
-                                    'Not Connected [NC]': not_connected,
-                                    'Not Interested': not_interested,
-                                    'Not Qualified': not_qualified,
-                                    'Cold': cold,
-                                    'Duplicate': duplicate,
-                                    'Warm': warm,
-                                    'Hot': hot,
-                                    'Future Prospect': future_prospect,
-                                    'Other Statuses': other_statuses,
-                                    'Low Quality': low_quality,
-                                    'Low Quality %': low_quality_pct,
-                                    'Good Quality': good_quality,
-                                    'Good Quality %': good_quality_pct,
-                                    'Grand Total': grand_total
-                                }
-                                
-                                # Add Course/Program if available
-                                if 'Course/Program' in group_cols:
-                                    # Get most common course for this source
-                                    course_value = ""
-                                    if 'Course/Program' in df_copy.columns:
-                                        source_mask = df_copy[group_cols[0]] == (source if isinstance(source, str) else source[0])
-                                        course_counts = df_copy.loc[source_mask, 'Course/Program'].value_counts()
-                                        if not course_counts.empty:
-                                            course_value = course_counts.index[0]
-                                    row_data['Course/Program'] = course_value
-                                
-                                analysis_data.append(row_data)
+                        # Group by source and course
+                        grouped = df.groupby(group_cols + ['Lead Status']).size().reset_index(name='Count')
                         
-                        elif len(group_cols) >= 2:
-                            # Group by both source and course
-                            unique_combinations = df_copy[group_cols].drop_duplicates()
+                        # Get unique combinations of source and course
+                        unique_groups = df[group_cols].drop_duplicates()
+                        
+                        for _, row in unique_groups.iterrows():
+                            # Filter data for this group
+                            mask = pd.Series([True] * len(df))
+                            for col in group_cols:
+                                mask = mask & (df[col] == row[col])
                             
-                            for _, row in unique_combinations.iterrows():
-                                mask = pd.Series([True] * len(df_copy))
-                                for col in group_cols:
-                                    mask = mask & (df_copy[col] == row[col])
-                                
-                                group_df = df_copy[mask]
-                                
-                                if len(group_df) == 0:
-                                    continue
-                                
-                                # Count statuses in this group
-                                status_counts = group_df['Lead_Status_Normalized'].value_counts().to_dict()
-                                
-                                # Calculate counts for each status type
-                                not_connected = 0
-                                not_interested = 0
-                                not_qualified = 0
-                                cold = 0
-                                duplicate = 0
-                                warm = 0
-                                hot = 0
-                                future_prospect = 0
-                                other_statuses = 0
-                                
-                                for status, count in status_counts.items():
-                                    status_lower = str(status).lower()
-                                    
-                                    if 'not connected' in status_lower:
-                                        not_connected += count
-                                    elif 'not interested' in status_lower:
-                                        not_interested += count
-                                    elif 'not qualified' in status_lower:
-                                        not_qualified += count
-                                    elif 'cold' in status_lower:
-                                        cold += count
-                                    elif 'duplicate' in status_lower:
-                                        duplicate += count
-                                    elif 'warm' in status_lower:
-                                        warm += count
-                                    elif 'hot' in status_lower:
-                                        hot += count
-                                    elif 'future' in status_lower and 'prospect' in status_lower:
-                                        future_prospect += count
-                                    else:
-                                        other_statuses += count
-                                
-                                # Calculate totals
-                                low_quality = not_interested + not_qualified
-                                good_quality = warm + hot + cold
-                                grand_total = len(group_df)
-                                
-                                # Calculate percentages
-                                low_quality_pct = (low_quality / grand_total * 100) if grand_total > 0 else 0
-                                good_quality_pct = (good_quality / grand_total * 100) if grand_total > 0 else 0
-                                
-                                # Create row data
-                                row_data = {}
-                                for col in group_cols:
-                                    row_data[col] = row[col]
-                                
-                                row_data.update({
-                                    'Not Connected [NC]': not_connected,
-                                    'Not Interested': not_interested,
-                                    'Not Qualified': not_qualified,
-                                    'Cold': cold,
-                                    'Duplicate': duplicate,
-                                    'Warm': warm,
-                                    'Hot': hot,
-                                    'Future Prospect': future_prospect,
-                                    'Other Statuses': other_statuses,
-                                    'Low Quality': low_quality,
-                                    'Low Quality %': low_quality_pct,
-                                    'Good Quality': good_quality,
-                                    'Good Quality %': good_quality_pct,
-                                    'Grand Total': grand_total
-                                })
-                                
-                                analysis_data.append(row_data)
+                            group_df = df[mask]
+                            
+                            if len(group_df) == 0:
+                                continue
+                            
+                            # Count each lead status
+                            status_counts = group_df['Lead Status'].value_counts().to_dict()
+                            
+                            # Calculate quality metrics
+                            not_connected = status_counts.get('Not Connected', 0)
+                            not_interested = status_counts.get('Not Interested', 0)
+                            not_qualified = status_counts.get('Not Qualified', 0)
+                            cold = status_counts.get('Cold', 0)
+                            duplicate = status_counts.get('Duplicate', 0)
+                            warm = status_counts.get('Warm', 0)
+                            hot = status_counts.get('Hot', 0)
+                            future_prospect = status_counts.get('Future Prospect', 0)
+                            
+                            low_quality = not_interested + not_qualified
+                            good_quality = warm + hot + cold
+                            grand_total = len(group_df)
+                            
+                            # Calculate percentages
+                            low_quality_pct = (low_quality / grand_total * 100) if grand_total > 0 else 0
+                            good_quality_pct = (good_quality / grand_total * 100) if grand_total > 0 else 0
+                            
+                            # Build row data
+                            row_data = {}
+                            for col in group_cols:
+                                row_data[col] = row[col]
+                            
+                            row_data.update({
+                                'Not Connected [NC]': not_connected,
+                                'Not Interested': not_interested,
+                                'Not Qualified': not_qualified,
+                                'Cold': cold,
+                                'Duplicate': duplicate,
+                                'Warm': warm,
+                                'Hot': hot,
+                                'Future Prospect': future_prospect,
+                                'Low Quality': low_quality,
+                                'Low Quality %': low_quality_pct,
+                                'Good Quality': good_quality,
+                                'Good Quality %': good_quality_pct,
+                                'Grand Total': grand_total
+                            })
+                            
+                            analysis_data.append(row_data)
                         
                         if analysis_data:
                             analysis_df = pd.DataFrame(analysis_data)
@@ -1256,28 +1135,12 @@ def main():
                                     low_q_idx = row.index.get_loc('Low Quality %')
                                     if row['Low Quality %'] > 40:
                                         styles[low_q_idx] = 'background-color: #ff4444; color: white; font-weight: bold'
-                                    elif row['Low Quality %'] > 20:
-                                        styles[low_q_idx] = 'background-color: #ff9966; color: black; font-weight: bold'
                                 
                                 # Find Good Quality % column index
                                 if 'Good Quality %' in row.index:
                                     good_q_idx = row.index.get_loc('Good Quality %')
                                     if row['Good Quality %'] > 50:
                                         styles[good_q_idx] = 'background-color: #38ef7d; color: white; font-weight: bold'
-                                    elif row['Good Quality %'] > 30:
-                                        styles[good_q_idx] = 'background-color: #98fb98; color: black; font-weight: bold'
-                                
-                                # Highlight Hot leads
-                                if 'Hot' in row.index:
-                                    hot_idx = row.index.get_loc('Hot')
-                                    if row['Hot'] > 0:
-                                        styles[hot_idx] = 'background-color: #ff4444; color: white; font-weight: bold'
-                                
-                                # Highlight Warm leads
-                                if 'Warm' in row.index:
-                                    warm_idx = row.index.get_loc('Warm')
-                                    if row['Warm'] > 0:
-                                        styles[warm_idx] = 'background-color: #ff9966; color: white; font-weight: bold'
                                 
                                 return styles
                             
@@ -1289,26 +1152,6 @@ def main():
                             
                             st.dataframe(styled_df, use_container_width=True, height=600)
                             
-                            # Summary statistics
-                            st.markdown("#### Summary Statistics")
-                            summary_col1, summary_col2, summary_col3, summary_col4 = st.columns(4)
-                            
-                            with summary_col1:
-                                total_hot = analysis_df['Hot'].sum() if 'Hot' in analysis_df.columns else 0
-                                st.metric("Total Hot Leads", f"{total_hot:,}")
-                            
-                            with summary_col2:
-                                total_warm = analysis_df['Warm'].sum() if 'Warm' in analysis_df.columns else 0
-                                st.metric("Total Warm Leads", f"{total_warm:,}")
-                            
-                            with summary_col3:
-                                total_cold = analysis_df['Cold'].sum() if 'Cold' in analysis_df.columns else 0
-                                st.metric("Total Cold Leads", f"{total_cold:,}")
-                            
-                            with summary_col4:
-                                avg_low_quality = analysis_df['Low Quality %'].mean() if 'Low Quality %' in analysis_df.columns else 0
-                                st.metric("Avg Low Quality %", f"{avg_low_quality:.1f}%")
-                            
                             # Download button
                             csv_quality = analysis_df.to_csv(index=False)
                             st.download_button(
@@ -1318,17 +1161,32 @@ def main():
                                 "text/csv",
                                 use_container_width=False
                             )
+                            
+                            # Summary stats
+                            st.markdown("#### Summary")
+                            sum_col1, sum_col2, sum_col3 = st.columns(3)
+                            
+                            with sum_col1:
+                                avg_low_quality = analysis_df['Low Quality %'].mean()
+                                st.metric("Avg Low Quality %", f"{avg_low_quality:.1f}%")
+                            
+                            with sum_col2:
+                                avg_good_quality = analysis_df['Good Quality %'].mean()
+                                st.metric("Avg Good Quality %", f"{avg_good_quality:.1f}%")
+                            
+                            with sum_col3:
+                                high_risk_count = (analysis_df['Low Quality %'] > 40).sum()
+                                st.metric("High Risk Rows (>40% Low Quality)", high_risk_count)
                         else:
                             st.info("No data available for quality analysis")
-                            st.write("Available columns:", list(df.columns))
                     else:
-                        st.warning("Required columns not found. Please ensure at least one source column exists in your data.")
-                        st.write("Available columns in your data:", list(df.columns))
+                        st.warning("Required columns not found. Please ensure 'Original source drill-down 2' or 'Course/Program' columns exist in your data.")
                 else:
                     st.warning("Lead Status column not found in data")
             
             with tab2:  # PROSPECT REASONS ANALYSIS
                 st.markdown("### 🎯 Prospect Reasons Analysis")
+
                 
                 if st.session_state.analysis_results and 'prospect_reasons' in st.session_state.analysis_results:
                     prospect_reasons = st.session_state.analysis_results['prospect_reasons']
@@ -1751,7 +1609,6 @@ def main():
                             <li>✅ <strong>Prospect Reasons Analysis</strong> with tabs</li>
                             <li>✅ <strong>UNLIMITED fetching</strong> - Gets ALL records</li>
                             <li>✅ <strong>Hidden API Key</strong> - Secure configuration</li>
-                            <li>✅ <strong>FIXED: Hot/Warm/Cold Lead Counting</strong> - Now working correctly!</li>
                         </ul>
                         <p style='margin-top: 2rem;'>📊 <strong>Advanced Analytics:</strong></p>
                         <ul style='text-align: left; margin-left: 30%;'>
@@ -1760,7 +1617,6 @@ def main():
                             <li>📚 Course/program insights</li>
                             <li>📧 Comprehensive email validation</li>
                             <li>📥 Multiple export formats (CSV, Excel)</li>
-                            <li>🎯 <strong>Quality Analysis Table with Hot/Warm/Cold counts</strong></li>
                         </ul>
                     </div>
                 </div>
