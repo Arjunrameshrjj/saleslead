@@ -1287,73 +1287,18 @@ def main():
             
             st.divider()
             
-            # Create tabs for different sections - ADDED NEW TAB
-            tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
-                "📊 Prospect Reasons Analysis",
+            # Create tabs for different sections - REMOVED Prospect Reasons tab
+            tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
                 "📈 Lead Status Distribution", 
                 "📚 Course Distribution",
-                "🎯 Course Quality Analysis",  # NEW TAB
+                "🎯 Course Quality Analysis",  # MOVED to position 3
                 "🔍 Analytics Dashboard", 
                 "🌍 Geographic Analysis", 
                 "📧 Email Validation",
                 "📥 Export Data"
             ])
             
-            with tab1:  # PROSPECT REASONS ANALYSIS
-                st.markdown("### 🎯 Prospect Reasons Analysis")
-
-                if st.session_state.analysis_results and 'prospect_reasons' in st.session_state.analysis_results:
-                    prospect_reasons = st.session_state.analysis_results['prospect_reasons']
-                    
-                    if prospect_reasons:
-                        # Create tabs for each reason type
-                        reason_tabs = st.tabs(list(prospect_reasons.keys())[:5])
-                        
-                        for i, (reason_type, reason_data) in enumerate(list(prospect_reasons.items())[:5]):
-                            with reason_tabs[i]:
-                                if not reason_data.empty:
-                                    col_a1, col_a2 = st.columns([2, 1])
-                                    
-                                    with col_a1:
-                                        st.markdown(f"#### {reason_type}")
-                                        st.dataframe(
-                                            reason_data,
-                                            use_container_width=True,
-                                            height=300
-                                        )
-                                    
-                                    with col_a2:
-                                        # Download button
-                                        csv = reason_data.to_csv(index=False)
-                                        st.download_button(
-                                            "📥 Download",
-                                            csv,
-                                            f"{reason_type.replace(' ', '_')}.csv",
-                                            "text/csv",
-                                            use_container_width=True
-                                        )
-                                        
-                                        # Chart for top 10 reasons
-                                        if len(reason_data) > 0:
-                                            top_10 = reason_data.head(10)
-                                            fig = px.bar(
-                                                top_10,
-                                                x='Reason',
-                                                y='Count',
-                                                title=f"Top 10 - {reason_type[:20]}",
-                                                color='Count',
-                                                color_continuous_scale='Viridis'
-                                            )
-                                            fig.update_layout(xaxis_tickangle=-45, height=300)
-                                            st.plotly_chart(fig, use_container_width=True)
-                                else:
-                                    st.info(f"No data available for {reason_type}")
-                    else:
-                        st.info("No prospect reason data available")
-                else:
-                    st.info("No prospect reason analysis available")
-            
-            with tab2:  # LEAD STATUS DISTRIBUTION
+            with tab1:  # LEAD STATUS DISTRIBUTION
                 st.markdown("### 📊 Lead Status Distribution")
                 
                 if st.session_state.analysis_results and 'lead_status_distribution' in st.session_state.analysis_results:
@@ -1428,7 +1373,7 @@ def main():
                 else:
                     st.info("No lead status analysis available")
             
-            with tab3:  # COURSE DISTRIBUTION
+            with tab2:  # COURSE DISTRIBUTION
                 st.markdown("### 📚 Course/Program Distribution")
                 
                 if st.session_state.analysis_results and 'course_distribution' in st.session_state.analysis_results:
@@ -1502,7 +1447,7 @@ def main():
                 else:
                     st.info("No course distribution analysis available")
             
-            with tab4:  # 🎯 NEW: COURSE QUALITY ANALYSIS
+            with tab3:  # 🎯 FIXED: COURSE QUALITY ANALYSIS - PROPER UI
                 st.markdown("### 🎯 Course-wise Lead Quality Analysis")
                 st.markdown("*Pivot table showing lead status distribution by course/program with quality metrics*")
                 
@@ -1527,57 +1472,66 @@ def main():
                         
                         st.divider()
                         
-                        # Create a copy for display with formatted percentages
+                        # Display the main course quality table using Streamlit dataframe
+                        st.markdown("#### Course Quality Matrix")
+                        
+                        # Create a copy for display with formatting
                         display_df = quality_df.copy()
                         
-                        # Store original numeric values for comparison (BEFORE formatting)
+                        # Store original numeric values for comparison
                         low_quality_values = display_df['Low Quality %'].copy()
                         good_quality_values = display_df['Good Quality %'].copy()
                         
-                        # Format percentage columns for display (as strings)
+                        # Format numeric columns for better display
+                        format_columns = [
+                            'Not Connected (NC)', 'Not Interested', 'Not Qualified',
+                            'Cold', 'Duplicate', 'Warm', 'Hot', 'Future Prospect',
+                            'Customer', 'New Lead', 'Low Quality Leads', 'Good Quality Leads',
+                            'Grand Total'
+                        ]
+                        
+                        # Apply formatting to integer columns
+                        for col in format_columns:
+                            if col in display_df.columns:
+                                display_df[col] = display_df[col].apply(lambda x: f"{int(x):,}" if pd.notnull(x) else "0")
+                        
+                        # Format percentage columns
                         display_df['Low Quality %'] = display_df['Low Quality %'].apply(lambda x: f"{x:.1f}%")
                         display_df['Good Quality %'] = display_df['Good Quality %'].apply(lambda x: f"{x:.1f}%")
                         
-                        # Create a helper function for manual highlighting
-                        def apply_manual_highlight(df_display, low_quality_series, good_quality_series):
-                            """Apply manual highlighting based on numeric values"""
-                            highlighted_data = []
-                            
-                            for idx, row in df_display.iterrows():
-                                row_dict = row.to_dict()
-                                
-                                # Add highlighting classes based on numeric values
-                                if low_quality_series.iloc[idx] > 40:
-                                    row_dict['Low Quality %'] = f"<span class='quality-high-red'>{row_dict['Low Quality %']}</span>"
-                                
-                                if good_quality_series.iloc[idx] > 50:
-                                    row_dict['Good Quality %'] = f"<span class='quality-high-green'>{row_dict['Good Quality %']}</span>"
-                                
-                                highlighted_data.append(row_dict)
-                            
-                            return pd.DataFrame(highlighted_data)
-                        
-                        # Apply manual highlighting
-                        highlighted_df = apply_manual_highlight(display_df, low_quality_values, good_quality_values)
-                        
-                        # Display the dataframe with HTML formatting
-                        st.markdown("#### Course Quality Matrix")
-                        st.markdown(highlighted_df.to_html(escape=False, index=False), unsafe_allow_html=True)
+                        # Display the dataframe with proper scrolling
+                        st.dataframe(
+                            display_df,
+                            use_container_width=True,
+                            height=500,
+                            column_config={
+                                "Course/Program": st.column_config.TextColumn("Course/Program", width="large"),
+                                "Low Quality %": st.column_config.TextColumn("Low Quality %", width="small"),
+                                "Good Quality %": st.column_config.TextColumn("Good Quality %", width="small"),
+                                "Grand Total": st.column_config.TextColumn("Total Leads", width="small")
+                            }
+                        )
                         
                         # Legend
                         st.markdown("""
                         <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; margin-top: 1rem;">
                             <strong>🎯 Quality Metrics Legend:</strong>
                             <ul style="margin-bottom: 0;">
-                                <li><span class="quality-high-red" style="padding: 0.2rem 0.5rem; border-radius: 0.2rem;">🔴 RED</span> = Low Quality % > 40% (High Not Interested/Not Qualified)</li>
-                                <li><span class="quality-high-green" style="padding: 0.2rem 0.5rem; border-radius: 0.2rem;">🟢 GREEN</span> = Good Quality % > 50% (High Cold/Warm/Hot leads)</li>
                                 <li><strong>Low Quality</strong> = Not Interested + Not Qualified</li>
                                 <li><strong>Good Quality</strong> = Cold + Warm + Hot</li>
+                                <li><strong>Low Quality %</strong> = Percentage of low quality leads</li>
+                                <li><strong>Good Quality %</strong> = Percentage of good quality leads</li>
                             </ul>
+                            <p style="margin-top: 0.5rem; margin-bottom: 0; font-size: 0.9rem;">
+                                <span style="background-color: #f8d7da; color: #721c24; padding: 0.2rem 0.5rem; border-radius: 0.2rem; font-weight: bold;">🔴</span> 
+                                Low Quality % > 40% indicates high number of disqualified leads<br>
+                                <span style="background-color: #d4edda; color: #155724; padding: 0.2rem 0.5rem; border-radius: 0.2rem; font-weight: bold;">🟢</span> 
+                                Good Quality % > 50% indicates strong lead pipeline
+                            </p>
                         </div>
                         """, unsafe_allow_html=True)
                         
-                        # Download button
+                        # Download and additional options
                         st.divider()
                         col_dl1, col_dl2, col_dl3 = st.columns(3)
                         
@@ -1592,7 +1546,7 @@ def main():
                             )
                         
                         with col_dl2:
-                            # Show raw numeric data (no formatting)
+                            # Show raw numeric data
                             if st.button("📊 View Raw Numeric Data", use_container_width=True):
                                 st.dataframe(quality_df, use_container_width=True, height=400)
                         
@@ -1644,7 +1598,7 @@ def main():
                 else:
                     st.info("No course quality analysis available")
             
-            with tab5:  # Analytics Dashboard
+            with tab4:  # Analytics Dashboard
                 st.markdown("### 📈 Comprehensive Analytics")
                 
                 if st.session_state.analysis_results and st.session_state.visualizations:
@@ -1709,7 +1663,7 @@ def main():
                         if 'completeness' in analysis:
                             st.dataframe(analysis['completeness'], use_container_width=True, height=300)
             
-            with tab6:  # Geographic Analysis
+            with tab5:  # Geographic Analysis
                 st.markdown("### 🌍 Geographic Distribution")
                 
                 if st.session_state.analysis_results:
@@ -1733,7 +1687,7 @@ def main():
                         # Country data table
                         st.dataframe(country_data, use_container_width=True, height=400)
             
-            with tab7:  # Email Validation
+            with tab6:  # Email Validation
                 st.markdown("### 📧 Email Validation")
                 
                 if st.session_state.email_validation is not None:
@@ -1764,7 +1718,7 @@ def main():
                     else:
                         st.success("✅ All emails appear valid!")
             
-            with tab8:  # Export Data
+            with tab7:  # Export Data
                 st.markdown("### 📥 Export Options")
                 
                 # First row of export buttons
@@ -1847,22 +1801,14 @@ def main():
                             )
                     
                     with export_row2[3]:
-                        if 'prospect_reasons' in st.session_state.analysis_results:
-                            # Combine all prospect reasons
-                            all_reasons = pd.DataFrame()
-                            for reason_type, reason_data in st.session_state.analysis_results['prospect_reasons'].items():
-                                reason_data['Reason_Type'] = reason_type
-                                all_reasons = pd.concat([all_reasons, reason_data])
-                            
-                            if not all_reasons.empty:
-                                csv = all_reasons.to_csv(index=False)
-                                st.download_button(
-                                    "🎯 All Prospect Reasons",
-                                    csv,
-                                    "all_prospect_reasons.csv",
-                                    "text/csv",
-                                    use_container_width=True
-                                )
+                        # Other exports if needed
+                        st.download_button(
+                            "📋 All Analysis",
+                            "",
+                            disabled=True,
+                            help="Combine all analyses in Excel download above",
+                            use_container_width=True
+                        )
             
             # Footer
             st.divider()
@@ -1893,7 +1839,6 @@ def main():
                             <li>✅ <strong>Course Quality Analysis</strong> - NEW Pivot Table</li>
                             <li>✅ <strong>Correct Lead Status Counts</strong> - Old values merged</li>
                             <li>✅ <strong>Course Distribution</strong> with counts</li>
-                            <li>✅ <strong>Prospect Reasons Analysis</strong> with tabs</li>
                             <li>✅ <strong>UNLIMITED fetching</strong> - Gets ALL records</li>
                         </ul>
                         <p style='margin-top: 2rem;'>📊 <strong>New Course Quality Analysis Includes:</strong></p>
@@ -1901,7 +1846,7 @@ def main():
                             <li>🎯 <strong>Pivot Table</strong> - Course × Lead Status matrix</li>
                             <li>🔴 <strong>Low Quality Leads</strong> = Not Interested + Not Qualified</li>
                             <li>🟢 <strong>Good Quality Leads</strong> = Cold + Warm + Hot</li>
-                            <li>📈 <strong>Conditional Formatting</strong> - Red/Green highlights</li>
+                            <li>📈 <strong>Quality Metrics</strong> - Percentage calculations</li>
                             <li>📥 <strong>Export Ready</strong> - Download complete analysis</li>
                         </ul>
                     </div>
