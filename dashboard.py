@@ -124,6 +124,65 @@ COUNTRY_CODES = {
     '+39': 'Italy'
 }
 
+# 🔥 UPDATED Lead Status Mapping (INTERNAL → DISPLAY NAME)
+LEAD_STATUS_MAP = {
+    "new": "New Lead",
+    "open": "New Lead",
+    "cold": "Cold",
+    "warm": "Warm",
+    "hot": "Hot",
+    "customer": "Customer",
+    "duplicate": "Duplicate",
+    "not_connected": "Not Connected (NC)",
+    "not_interested": "Not Interested",
+    "unqualified": "Not Qualified",
+    "not_qualified": "Not Qualified",
+    "qualified": "Qualified",
+    "junk": "Duplicate",
+    "unknown": "Unknown",
+    "": "Unknown",
+    "none": "Unknown",
+    "null": "Unknown",
+    "other": "Other"
+}
+
+# 🔥 PROSPECT REASONS MAPPING (INTERNAL → DISPLAY NAME)
+PROSPECT_REASON_MAP = {
+    "hot_prospect": "Hot",
+    "future_prospect": "Future Prospect",
+    "neutral_prospect": "Neutral",
+    "not_connected": "Not Connected",
+    "not_interested": "Not Interested",
+    "other_enquiry": "Other Enquiry",
+    "prospect": "Prospect",
+    "contact": "Contact",
+    "enquiry": "Enquiry",
+    "price_issue": "Price Issue",
+    "budget_issue": "Budget Issue",
+    "timing_issue": "Timing Issue",
+    "competitor": "Competitor",
+    "no_requirement": "No Requirement",
+    "call_back_later": "Call Back Later",
+    "already_using_competitor": "Already Using Competitor",
+    "not_decision_maker": "Not Decision Maker",
+    "not_responsive": "Not Responsive",
+    "needs_more_info": "Needs More Info",
+    "interested_for_future": "Interested for Future",
+    "demo_scheduled": "Demo Scheduled",
+    "follow_up_required": "Follow Up Required",
+    "quote_requested": "Quote Requested",
+    "trial_requested": "Trial Requested",
+    "pricing_requested": "Pricing Requested",
+    "product_info": "Product Information",
+    "technical_query": "Technical Query",
+    "support_issue": "Support Issue",
+    "partnership": "Partnership",
+    "career_opportunity": "Career Opportunity",
+    "feedback": "Feedback",
+    "complaint": "Complaint",
+    "general_info": "General Information"
+}
+
 # SECRET API KEY - LOADED FROM SECRETS
 try:
     if "HUBSPOT_API_KEY" in st.secrets:
@@ -442,7 +501,28 @@ def process_contacts_data(contacts):
                 course_info = properties[field]
                 break
         
-        # Extract all prospect reasons
+        # 🔥 CRITICAL FIX: Map raw lead status to display names
+        raw_lead_status = properties.get("hs_lead_status", "") or properties.get("lead_status", "")
+        raw_lead_status = str(raw_lead_status).strip().lower()
+        
+        # Map to display name
+        if raw_lead_status in LEAD_STATUS_MAP:
+            display_lead_status = LEAD_STATUS_MAP[raw_lead_status]
+        else:
+            # Try to clean and title case as fallback
+            display_lead_status = raw_lead_status.title()
+        
+        # 🔥 CRITICAL FIX: Map prospect reasons
+        def map_prospect_reason(reason):
+            if not reason:
+                return ""
+            reason_str = str(reason).strip().lower()
+            if reason_str in PROSPECT_REASON_MAP:
+                return PROSPECT_REASON_MAP[reason_str]
+            else:
+                # Clean up the reason string
+                return reason_str.replace("_", " ").title()
+        
         processed_data.append({
             "ID": contact.get("id", ""),
             "First Name": properties.get("firstname", ""),
@@ -457,25 +537,25 @@ def process_contacts_data(contacts):
             # COURSE/PROGRAM INFORMATION - NEW FIELD
             "Course/Program": course_info,
             
-            # LEAD STATUS AND PROSPECT REASONS
-            "Lead Status": properties.get("hs_lead_status", "") or properties.get("lead_status", ""),
+            # 🔥 LEAD STATUS WITH MAPPING - CORRECTED
+            "Lead Status": display_lead_status,
             "Lifecycle Stage": properties.get("lifecyclestage", ""),
             
-            # Prospect Reasons
-            "Future Prospect Reasons": properties.get("future_prospect_reasons", "") or properties.get("future_prospect_reason", ""),
-            "Hot Prospect Reason": properties.get("hot_prospect_reason", ""),
-            "Neutral Prospect Reasons": properties.get("neutral_prospect_reasons", ""),
-            "Not Connected Reasons": properties.get("not_connected_reasons", ""),
-            "Not Interested Reasons": properties.get("not_interested_reasons", ""),
-            "Other Enquiry Reasons": properties.get("other_enquiry_reasons", ""),
-            "Prospect Reasons": properties.get("prospect_reasons", ""),
+            # 🔥 PROSPECT REASONS WITH MAPPING - CORRECTED
+            "Future Prospect Reasons": map_prospect_reason(properties.get("future_prospect_reasons", "") or properties.get("future_prospect_reason", "")),
+            "Hot Prospect Reason": map_prospect_reason(properties.get("hot_prospect_reason", "")),
+            "Neutral Prospect Reasons": map_prospect_reason(properties.get("neutral_prospect_reasons", "")),
+            "Not Connected Reasons": map_prospect_reason(properties.get("not_connected_reasons", "")),
+            "Not Interested Reasons": map_prospect_reason(properties.get("not_interested_reasons", "")),
+            "Other Enquiry Reasons": map_prospect_reason(properties.get("other_enquiry_reasons", "")),
+            "Prospect Reasons": map_prospect_reason(properties.get("prospect_reasons", "")),
             
-            # Additional reason fields
-            "Contact Reason": properties.get("contact_reason", ""),
-            "Reason for Contact": properties.get("reason_for_contact", ""),
-            "Enquiry Reason": properties.get("enquiry_reason", ""),
-            "Disqualification Reason": properties.get("disqualification_reason", ""),
-            "Conversion Reason": properties.get("conversion_reason", ""),
+            # Additional reason fields with mapping
+            "Contact Reason": map_prospect_reason(properties.get("contact_reason", "")),
+            "Reason for Contact": map_prospect_reason(properties.get("reason_for_contact", "")),
+            "Enquiry Reason": map_prospect_reason(properties.get("enquiry_reason", "")),
+            "Disqualification Reason": map_prospect_reason(properties.get("disqualification_reason", "")),
+            "Conversion Reason": map_prospect_reason(properties.get("conversion_reason", "")),
             
             # Other contact info
             "Country": properties.get("country", ""),
@@ -490,26 +570,33 @@ def process_contacts_data(contacts):
             "Last Modified Date": last_modified,
             "Has Email": 1 if properties.get("email") else 0,
             "Has Phone": 1 if properties.get("phone") else 0,
-            "Has Course": 1 if course_info else 0  # NEW: Track if has course info
+            "Has Course": 1 if course_info else 0,
+            # 🔥 Store raw value for debugging
+            "Lead Status Raw": raw_lead_status
         })
     
     df = pd.DataFrame(processed_data)
     return df
 
 def analyze_lead_status_distribution(df):
-    """Analyze lead status distribution - exactly like your example."""
+    """Analyze lead status distribution - with correct mapping."""
     if 'Lead Status' not in df.columns:
         return pd.DataFrame()
     
-    # Clean lead status data
+    # Use already mapped lead status from process_contacts_data
     df['Lead_Status_Clean'] = df['Lead Status'].fillna('Unknown').str.strip()
     
-    # Count distribution
+    # 🔥 Group by mapped lead status (already cleaned)
     lead_status_dist = df['Lead_Status_Clean'].value_counts().reset_index()
     lead_status_dist.columns = ['Lead Status', 'Count']
     
     # Sort by count (descending)
     lead_status_dist = lead_status_dist.sort_values('Count', ascending=False)
+    
+    # Add "Grand Total" row
+    grand_total = lead_status_dist['Count'].sum()
+    total_row = pd.DataFrame({'Lead Status': ['Grand Total'], 'Count': [grand_total]})
+    lead_status_dist = pd.concat([lead_status_dist, total_row], ignore_index=True)
     
     return lead_status_dist
 
@@ -537,7 +624,7 @@ def analyze_course_distribution(df):
     return course_dist
 
 def analyze_prospect_reasons(df):
-    """Analyze all prospect reasons - exactly like your example."""
+    """Analyze all prospect reasons - with correct mapping already applied."""
     # Define all prospect reason columns
     prospect_columns = [
         'Future Prospect Reasons',
@@ -560,7 +647,7 @@ def analyze_prospect_reasons(df):
     results = {}
     
     for column in available_columns:
-        # Clean the data
+        # 🔥 Data is already mapped in process_contacts_data, just clean it
         df[column] = df[column].fillna('').astype(str).str.strip()
         
         # Remove empty values
@@ -583,7 +670,7 @@ def analyze_contact_data(df):
     if df.empty:
         return analysis
     
-    # 1. Lead Status Distribution - EXACTLY LIKE YOUR EXAMPLE
+    # 1. Lead Status Distribution - WITH CORRECT MAPPING
     lead_status_dist = analyze_lead_status_distribution(df)
     if not lead_status_dist.empty:
         analysis['lead_status_distribution'] = lead_status_dist
@@ -593,7 +680,7 @@ def analyze_contact_data(df):
     if not course_dist.empty:
         analysis['course_distribution'] = course_dist
     
-    # 3. Prospect Reasons Analysis - EXACTLY LIKE YOUR EXAMPLE
+    # 3. Prospect Reasons Analysis - WITH CORRECT MAPPING
     prospect_reasons = analyze_prospect_reasons(df)
     if prospect_reasons:
         analysis['prospect_reasons'] = prospect_reasons
@@ -634,7 +721,7 @@ def analyze_contact_data(df):
             df['Email'].notna().sum(),
             df['Phone'].notna().sum(),
             df['Lead Status'].notna().sum(),
-            df['Has Course'].sum(),  # Course completeness
+            df['Has Course'].sum(),
             df['Country'].notna().sum(),
             df['Industry'].notna().sum()
         ],
@@ -642,7 +729,7 @@ def analyze_contact_data(df):
             (df['Email'].notna().sum() / len(df)) * 100,
             (df['Phone'].notna().sum() / len(df)) * 100,
             (df['Lead Status'].notna().sum() / len(df)) * 100,
-            (df['Has Course'].sum() / len(df)) * 100,  # Course percentage
+            (df['Has Course'].sum() / len(df)) * 100,
             (df['Country'].notna().sum() / len(df)) * 100,
             (df['Industry'].notna().sum() / len(df)) * 100
         ]
@@ -653,6 +740,13 @@ def analyze_contact_data(df):
     if 'Phone' in df.columns:
         phone_analysis = analyze_phone_numbers(df)
         analysis['phone_country_analysis'] = phone_analysis
+    
+    # 10. Raw vs Mapped Debug Info
+    if 'Lead Status Raw' in df.columns:
+        debug_data = df[['Lead Status', 'Lead Status Raw']].copy()
+        debug_data = debug_data.groupby(['Lead Status', 'Lead Status Raw']).size().reset_index(name='Count')
+        debug_data = debug_data.sort_values('Count', ascending=False)
+        analysis['debug_mapping'] = debug_data.head(20)
     
     return analysis
 
@@ -753,12 +847,14 @@ def create_visualizations(analysis, df):
     """Create Plotly visualizations."""
     visualizations = {}
     
-    # 1. Lead Status Bar Chart (Top 10)
+    # 1. Lead Status Bar Chart (Top 10 - Excluding Grand Total)
     if 'lead_status_distribution' in analysis:
-        lead_status_data = analysis['lead_status_distribution'].head(10)
-        if not lead_status_data.empty:
+        lead_status_data = analysis['lead_status_distribution']
+        # Exclude "Grand Total" from chart
+        lead_status_chart_data = lead_status_data[lead_status_data['Lead Status'] != 'Grand Total'].head(10)
+        if not lead_status_chart_data.empty:
             fig1 = px.bar(
-                lead_status_data,
+                lead_status_chart_data,
                 x='Lead Status',
                 y='Count',
                 title='Top 10 Lead Statuses',
@@ -814,10 +910,12 @@ def create_visualizations(analysis, df):
     
     # 5. Lead Status Pie Chart
     if 'lead_status_distribution' in analysis:
-        lead_status_data = analysis['lead_status_distribution'].head(8)
-        if not lead_status_data.empty:
+        lead_status_data = analysis['lead_status_distribution']
+        # Exclude "Grand Total" from pie chart
+        lead_status_pie_data = lead_status_data[lead_status_data['Lead Status'] != 'Grand Total'].head(8)
+        if not lead_status_pie_data.empty:
             fig5 = px.pie(
-                lead_status_data,
+                lead_status_pie_data,
                 values='Count',
                 names='Lead Status',
                 title='Lead Status Distribution',
@@ -1126,17 +1224,24 @@ def main():
                             )
                             
                             # Quick stats
-                            total_leads = lead_status_data['Count'].sum()
-                            top_status = lead_status_data.iloc[0]['Lead Status'] if len(lead_status_data) > 0 else "N/A"
-                            top_count = lead_status_data.iloc[0]['Count'] if len(lead_status_data) > 0 else 0
+                            # Exclude Grand Total for metrics
+                            data_for_metrics = lead_status_data[lead_status_data['Lead Status'] != 'Grand Total']
+                            total_leads = data_for_metrics['Count'].sum() if not data_for_metrics.empty else 0
+                            top_status = data_for_metrics.iloc[0]['Lead Status'] if len(data_for_metrics) > 0 else "N/A"
+                            top_count = data_for_metrics.iloc[0]['Count'] if len(data_for_metrics) > 0 else 0
                             
                             st.metric("Total Records", total_leads)
                             st.metric("Top Status", top_status, delta=f"{top_count} records")
                             
+                            # Debug info (optional - can be removed)
+                            if st.checkbox("Show Debug Mapping Info", key="debug_mapping"):
+                                if 'debug_mapping' in st.session_state.analysis_results:
+                                    st.dataframe(st.session_state.analysis_results['debug_mapping'], use_container_width=True)
+                            
                             # Pie chart
-                            if len(lead_status_data) > 0:
+                            if len(data_for_metrics) > 0:
                                 fig = px.pie(
-                                    lead_status_data.head(8),
+                                    data_for_metrics.head(8),
                                     values='Count',
                                     names='Lead Status',
                                     title="Lead Status Distribution",
@@ -1458,8 +1563,8 @@ def main():
                         <p>🎯 <strong>Key Features:</strong></p>
                         <ul style='text-align: left; margin-left: 30%;'>
                             <li>✅ <strong>Course Distribution</strong> with counts</li>
-                            <li>✅ <strong>Lead Status Distribution</strong></li>
-                            <li>✅ <strong>Prospect Reasons Analysis</strong> with tabs</li>
+                            <li>✅ <strong>Lead Status Distribution</strong> (Fixed Mapping)</li>
+                            <li>✅ <strong>Prospect Reasons Analysis</strong> (Fixed Mapping)</li>
                             <li>✅ <strong>UNLIMITED fetching</strong> - Gets ALL records</li>
                             <li>✅ <strong>Hidden API Key</strong> - Secure configuration</li>
                         </ul>
