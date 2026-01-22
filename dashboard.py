@@ -303,13 +303,7 @@ def fetch_hubspot_contacts_with_date_filter(api_key, date_field, start_date, end
         "createdate", "lastmodifieddate", "hs_object_id",
         "company", "jobtitle", "country", "state", "city",
         "industry", "annualrevenue", "numemployees",
-        "website", "mobilephone", "address",
-        
-        # Source properties
-        "hs_analytics_source", "hs_analytics_source_data_1",
-        "hs_analytics_source_data_2", "hs_analytics_first_touch_converting_campaign",
-        "hs_analytics_last_touch_converting_campaign", "source",
-        "original_source", "original_source_drill_down_1", "original_source_drill_down_2"
+        "website", "mobilephone", "address"
     ]
     
     try:
@@ -448,23 +442,6 @@ def process_contacts_data(contacts):
                 course_info = properties[field]
                 break
         
-        # Extract source information
-        source_info = ""
-        source_fields = [
-            "original_source_drill_down_2",
-            "hs_analytics_source_data_2",
-            "hs_analytics_source",
-            "hs_analytics_first_touch_converting_campaign",
-            "hs_analytics_last_touch_converting_campaign",
-            "source",
-            "original_source"
-        ]
-        
-        for field in source_fields:
-            if field in properties and properties[field]:
-                source_info = properties[field]
-                break
-        
         # Extract all prospect reasons
         processed_data.append({
             "ID": contact.get("id", ""),
@@ -479,9 +456,6 @@ def process_contacts_data(contacts):
             
             # COURSE/PROGRAM INFORMATION - NEW FIELD
             "Course/Program": course_info,
-            
-            # SOURCE INFORMATION
-            "Source": source_info,
             
             # LEAD STATUS AND PROSPECT REASONS
             "Lead Status": properties.get("hs_lead_status", "") or properties.get("lead_status", ""),
@@ -516,8 +490,7 @@ def process_contacts_data(contacts):
             "Last Modified Date": last_modified,
             "Has Email": 1 if properties.get("email") else 0,
             "Has Phone": 1 if properties.get("phone") else 0,
-            "Has Course": 1 if course_info else 0,  # NEW: Track if has course info
-            "Has Source": 1 if source_info else 0   # NEW: Track if has source info
+            "Has Course": 1 if course_info else 0  # NEW: Track if has course info
         })
     
     df = pd.DataFrame(processed_data)
@@ -656,13 +629,12 @@ def analyze_contact_data(df):
     
     # 8. Contact Completeness Analysis
     completeness_data = {
-        'Field': ['Email', 'Phone', 'Lead Status', 'Course/Program', 'Source', 'Country', 'Industry'],
+        'Field': ['Email', 'Phone', 'Lead Status', 'Course/Program', 'Country', 'Industry'],
         'Count': [
             df['Email'].notna().sum(),
             df['Phone'].notna().sum(),
             df['Lead Status'].notna().sum(),
             df['Has Course'].sum(),  # Course completeness
-            df['Has Source'].sum(),   # Source completeness
             df['Country'].notna().sum(),
             df['Industry'].notna().sum()
         ],
@@ -671,7 +643,6 @@ def analyze_contact_data(df):
             (df['Phone'].notna().sum() / len(df)) * 100,
             (df['Lead Status'].notna().sum() / len(df)) * 100,
             (df['Has Course'].sum() / len(df)) * 100,  # Course percentage
-            (df['Has Source'].sum() / len(df)) * 100,  # Source percentage
             (df['Country'].notna().sum() / len(df)) * 100,
             (df['Industry'].notna().sum() / len(df)) * 100
         ]
@@ -1067,229 +1038,155 @@ def main():
                 "📥 Export Data"
             ])
             
-            with tab1:  # QUALITY ANALYSIS TABLE - CORRECTED VERSION
+            with tab1:  # QUALITY ANALYSIS TABLE
                 st.markdown("### 🎯 Lead Quality Analysis by Source & Course")
                 
                 if 'Lead Status' in df.columns:
-                    # Create a copy of the dataframe for manipulation
-                    analysis_df = df.copy()
+                    # Create aggregation by Original Source and Course
+                    # Note: Adjust these column names based on your actual HubSpot data
+                    group_cols = []
                     
-                    # Check for source columns
-                    source_columns_to_try = [
-                        'Source',  # Already processed in process_contacts_data
-                        'original_source_drill_down_2',
-                        'hs_analytics_source_data_2',
-                        'hs_analytics_source',
-                        'hs_analytics_first_touch_converting_campaign',
-                        'hs_analytics_last_touch_converting_campaign',
-                        'original_source'
-                    ]
+                    # Check which columns exist
+                    if 'Original source drill-down 2' in df.columns:
+                        group_cols.append('Original source drill-down 2')
+                    elif 'hs_analytics_source_data_2' in df.columns:
+                        group_cols.append('hs_analytics_source_data_2')
                     
-                    # Use 'Source' column if it exists, otherwise try others
-                    if 'Source' in analysis_df.columns:
-                        source_column = 'Source'
-                    else:
-                        source_column = None
-                        for col in source_columns_to_try:
-                            if col in analysis_df.columns:
-                                source_column = col
-                                break
+                    if 'Course/Program' in df.columns:
+                        group_cols.append('Course/Program')
                     
-                    # If no source column found, create one
-                    if source_column is None or source_column not in analysis_df.columns:
-                        source_column = 'Source'
-                        analysis_df[source_column] = 'Unknown'
-                    
-                    # Get course column
-                    course_column = 'Course/Program' if 'Course/Program' in analysis_df.columns else 'Course_Program'
-                    if course_column not in analysis_df.columns:
-                        analysis_df[course_column] = 'No Course Data'
-                    
-                    # Clean the data
-                    analysis_df[source_column] = analysis_df[source_column].fillna('Unknown').astype(str).str.strip()
-                    analysis_df[course_column] = analysis_df[course_column].fillna('No Course Data').astype(str).str.strip()
-                    analysis_df['Lead Status'] = analysis_df['Lead Status'].fillna('Unknown').astype(str).str.strip()
-                    
-                    # Create a unique identifier for counting
-                    if 'ID' in analysis_df.columns:
-                        count_column = 'ID'
-                    else:
-                        analysis_df['Row_ID'] = range(1, len(analysis_df) + 1)
-                        count_column = 'Row_ID'
-                    
-                    # Create pivot table
-                    try:
-                        pivot_data = pd.pivot_table(
-                            analysis_df,
-                            values=count_column,
-                            index=[source_column, course_column],
-                            columns='Lead Status',
-                            aggfunc='count',
-                            fill_value=0,
-                            margins=True,
-                            margins_name='Total'
-                        ).reset_index()
+                    if group_cols:
+                        # Create pivot-like analysis
+                        analysis_data = []
                         
-                        # Calculate quality metrics
-                        # Define lead status categories
-                        not_connected_statuses = ['Not Connected', 'Not Contacted', 'New']
-                        not_interested_statuses = ['Not Interested', 'Disqualified', 'Unsubscribed', 'Spam']
-                        cold_statuses = ['Cold', 'Future Prospect']
-                        warm_statuses = ['Warm', 'Qualified', 'Subscriber']
-                        hot_statuses = ['Hot', 'Customer', 'Opportunity']
+                        # Group by source and course
+                        grouped = df.groupby(group_cols + ['Lead Status']).size().reset_index(name='Count')
                         
-                        # Initialize new columns
-                        pivot_data['Not Connected'] = 0
-                        pivot_data['Not Interested'] = 0
-                        pivot_data['Cold'] = 0
-                        pivot_data['Warm'] = 0
-                        pivot_data['Hot'] = 0
+                        # Get unique combinations of source and course
+                        unique_groups = df[group_cols].drop_duplicates()
                         
-                        # Calculate metrics
-                        for status in not_connected_statuses:
-                            if status in pivot_data.columns:
-                                pivot_data['Not Connected'] += pivot_data[status]
-                        
-                        for status in not_interested_statuses:
-                            if status in pivot_data.columns:
-                                pivot_data['Not Interested'] += pivot_data[status]
-                        
-                        for status in cold_statuses:
-                            if status in pivot_data.columns:
-                                pivot_data['Cold'] += pivot_data[status]
-                        
-                        for status in warm_statuses:
-                            if status in pivot_data.columns:
-                                pivot_data['Warm'] += pivot_data[status]
-                        
-                        for status in hot_statuses:
-                            if status in pivot_data.columns:
-                                pivot_data['Hot'] += pivot_data[status]
-                        
-                        # Calculate totals
-                        pivot_data['Low Quality'] = pivot_data['Not Connected'] + pivot_data['Not Interested']
-                        pivot_data['Good Quality'] = pivot_data['Warm'] + pivot_data['Hot']
-                        pivot_data['Total'] = pivot_data['Low Quality'] + pivot_data['Good Quality'] + pivot_data['Cold']
-                        
-                        # Calculate percentages
-                        pivot_data['Not Connected %'] = (pivot_data['Not Connected'] / pivot_data['Total'] * 100).round(1)
-                        pivot_data['Not Interested %'] = (pivot_data['Not Interested'] / pivot_data['Total'] * 100).round(1)
-                        pivot_data['Cold %'] = (pivot_data['Cold'] / pivot_data['Total'] * 100).round(1)
-                        pivot_data['Warm %'] = (pivot_data['Warm'] / pivot_data['Total'] * 100).round(1)
-                        pivot_data['Hot %'] = (pivot_data['Hot'] / pivot_data['Total'] * 100).round(1)
-                        pivot_data['Low Quality %'] = (pivot_data['Low Quality'] / pivot_data['Total'] * 100).round(1)
-                        pivot_data['Good Quality %'] = (pivot_data['Good Quality'] / pivot_data['Total'] * 100).round(1)
-                        
-                        # Remove the 'Total' row if present
-                        pivot_data = pivot_data[pivot_data[source_column] != 'Total']
-                        
-                        # Define display columns
-                        display_columns = [
-                            source_column, course_column,
-                            'Not Connected', 'Not Connected %',
-                            'Not Interested', 'Not Interested %',
-                            'Cold', 'Cold %',
-                            'Warm', 'Warm %',
-                            'Hot', 'Hot %',
-                            'Low Quality', 'Low Quality %',
-                            'Good Quality', 'Good Quality %',
-                            'Total'
-                        ]
-                        
-                        # Filter to only existing columns
-                        display_columns = [col for col in display_columns if col in pivot_data.columns]
-                        
-                        # Create final dataframe
-                        final_df = pivot_data[display_columns].copy()
-                        
-                        # Sort by Total descending
-                        final_df = final_df.sort_values('Total', ascending=False)
-                        
-                        if not final_df.empty:
-                            st.markdown(f"#### Lead Quality Analysis by {source_column} and {course_column}")
+                        for _, row in unique_groups.iterrows():
+                            # Filter data for this group
+                            mask = pd.Series([True] * len(df))
+                            for col in group_cols:
+                                mask = mask & (df[col] == row[col])
                             
-                            # Apply conditional formatting
-                            def highlight_quality(val):
-                                if isinstance(val, (int, float)):
-                                    if val > 40:  # Highlight high percentages
-                                        return 'background-color: #ff4444; color: white; font-weight: bold'
-                                    elif val > 20:
-                                        return 'background-color: #ffa07a; color: white'
-                                return ''
+                            group_df = df[mask]
                             
-                            # Display dataframe
-                            st.dataframe(
-                                final_df.style.applymap(
-                                    highlight_quality, 
-                                    subset=['Low Quality %', 'Not Connected %', 'Not Interested %']
-                                ).format({
-                                    'Not Connected %': '{:.1f}%',
-                                    'Not Interested %': '{:.1f}%',
-                                    'Cold %': '{:.1f}%',
-                                    'Warm %': '{:.1f}%',
-                                    'Hot %': '{:.1f}%',
-                                    'Low Quality %': '{:.1f}%',
-                                    'Good Quality %': '{:.1f}%'
-                                }),
-                                use_container_width=True,
-                                height=600
+                            if len(group_df) == 0:
+                                continue
+                            
+                            # Count each lead status
+                            status_counts = group_df['Lead Status'].value_counts().to_dict()
+                            
+                            # Calculate quality metrics
+                            not_connected = status_counts.get('Not Connected', 0)
+                            not_interested = status_counts.get('Not Interested', 0)
+                            not_qualified = status_counts.get('Not Qualified', 0)
+                            cold = status_counts.get('Cold', 0)
+                            duplicate = status_counts.get('Duplicate', 0)
+                            warm = status_counts.get('Warm', 0)
+                            hot = status_counts.get('Hot', 0)
+                            future_prospect = status_counts.get('Future Prospect', 0)
+                            
+                            low_quality = not_interested + not_qualified
+                            good_quality = warm + hot + cold
+                            grand_total = len(group_df)
+                            
+                            # Calculate percentages
+                            low_quality_pct = (low_quality / grand_total * 100) if grand_total > 0 else 0
+                            good_quality_pct = (good_quality / grand_total * 100) if grand_total > 0 else 0
+                            
+                            # Build row data
+                            row_data = {}
+                            for col in group_cols:
+                                row_data[col] = row[col]
+                            
+                            row_data.update({
+                                'Not Connected [NC]': not_connected,
+                                'Not Interested': not_interested,
+                                'Not Qualified': not_qualified,
+                                'Cold': cold,
+                                'Duplicate': duplicate,
+                                'Warm': warm,
+                                'Hot': hot,
+                                'Future Prospect': future_prospect,
+                                'Low Quality': low_quality,
+                                'Low Quality %': low_quality_pct,
+                                'Good Quality': good_quality,
+                                'Good Quality %': good_quality_pct,
+                                'Grand Total': grand_total
+                            })
+                            
+                            analysis_data.append(row_data)
+                        
+                        if analysis_data:
+                            analysis_df = pd.DataFrame(analysis_data)
+                            
+                            # Display with conditional formatting
+                            st.markdown("#### Lead Quality Breakdown")
+                            
+                            # Apply styling function
+                            def highlight_quality(row):
+                                styles = [''] * len(row)
+                                
+                                # Find Low Quality % column index
+                                if 'Low Quality %' in row.index:
+                                    low_q_idx = row.index.get_loc('Low Quality %')
+                                    if row['Low Quality %'] > 40:
+                                        styles[low_q_idx] = 'background-color: #ff4444; color: white; font-weight: bold'
+                                
+                                # Find Good Quality % column index
+                                if 'Good Quality %' in row.index:
+                                    good_q_idx = row.index.get_loc('Good Quality %')
+                                    if row['Good Quality %'] > 50:
+                                        styles[good_q_idx] = 'background-color: #38ef7d; color: white; font-weight: bold'
+                                
+                                return styles
+                            
+                            # Display styled dataframe
+                            styled_df = analysis_df.style.apply(highlight_quality, axis=1).format({
+                                'Low Quality %': '{:.1f}%',
+                                'Good Quality %': '{:.1f}%'
+                            })
+                            
+                            st.dataframe(styled_df, use_container_width=True, height=600)
+                            
+                            # Download button
+                            csv_quality = analysis_df.to_csv(index=False)
+                            st.download_button(
+                                "📥 Download Quality Analysis",
+                                csv_quality,
+                                "quality_analysis_table.csv",
+                                "text/csv",
+                                use_container_width=False
                             )
                             
-                            # Summary statistics
-                            st.markdown("#### 📊 Summary Statistics")
+                            # Summary stats
+                            st.markdown("#### Summary")
                             sum_col1, sum_col2, sum_col3 = st.columns(3)
                             
                             with sum_col1:
-                                avg_low_quality = final_df['Low Quality %'].mean()
+                                avg_low_quality = analysis_df['Low Quality %'].mean()
                                 st.metric("Avg Low Quality %", f"{avg_low_quality:.1f}%")
                             
                             with sum_col2:
-                                avg_good_quality = final_df['Good Quality %'].mean()
+                                avg_good_quality = analysis_df['Good Quality %'].mean()
                                 st.metric("Avg Good Quality %", f"{avg_good_quality:.1f}%")
                             
                             with sum_col3:
-                                high_risk_sources = (final_df['Low Quality %'] > 40).sum()
-                                st.metric("High Risk Sources (>40%)", high_risk_sources)
-                            
-                            # Download button
-                            csv_quality = final_df.to_csv(index=False)
-                            st.download_button(
-                                "📥 Download Quality Analysis Table",
-                                csv_quality,
-                                "lead_quality_analysis.csv",
-                                "text/csv",
-                                use_container_width=True
-                            )
-                            
-                            # Show data structure for debugging
-                            with st.expander("🔍 Data Structure Information"):
-                                st.write(f"Source column: {source_column}")
-                                st.write(f"Course column: {course_column}")
-                                st.write(f"Unique lead statuses: {sorted(analysis_df['Lead Status'].unique())}")
-                                st.write(f"Total rows in analysis: {len(final_df)}")
-                                st.write("Sample of processed data:")
-                                st.dataframe(
-                                    analysis_df[[source_column, course_column, 'Lead Status']].head(10),
-                                    use_container_width=True
-                                )
+                                high_risk_count = (analysis_df['Low Quality %'] > 40).sum()
+                                st.metric("High Risk Rows (>40% Low Quality)", high_risk_count)
                         else:
                             st.info("No data available for quality analysis")
-                            
-                    except Exception as e:
-                        st.error(f"Error creating quality analysis: {str(e)}")
-                        
-                        # Show simple analysis as fallback
-                        st.markdown("#### Simple Lead Count by Source and Course")
-                        simple_analysis = analysis_df.groupby([source_column, course_column, 'Lead Status']).size().reset_index(name='Count')
-                        st.dataframe(simple_analysis, use_container_width=True, height=400)
-                
+                    else:
+                        st.warning("Required columns not found. Please ensure 'Original source drill-down 2' or 'Course/Program' columns exist in your data.")
                 else:
                     st.warning("Lead Status column not found in data")
-                    st.info("Available columns in your data:")
-                    st.write(list(df.columns))
             
             with tab2:  # PROSPECT REASONS ANALYSIS
                 st.markdown("### 🎯 Prospect Reasons Analysis")
+
                 
                 if st.session_state.analysis_results and 'prospect_reasons' in st.session_state.analysis_results:
                     prospect_reasons = st.session_state.analysis_results['prospect_reasons']
@@ -1710,8 +1607,8 @@ def main():
                             <li>✅ <strong>Course Distribution</strong> with counts</li>
                             <li>✅ <strong>Lead Status Distribution</strong></li>
                             <li>✅ <strong>Prospect Reasons Analysis</strong> with tabs</li>
-                            <li>✅ <strong>Lead Quality Analysis</strong> by Source & Course</li>
                             <li>✅ <strong>UNLIMITED fetching</strong> - Gets ALL records</li>
+                            <li>✅ <strong>Hidden API Key</strong> - Secure configuration</li>
                         </ul>
                         <p style='margin-top: 2rem;'>📊 <strong>Advanced Analytics:</strong></p>
                         <ul style='text-align: left; margin-left: 30%;'>
