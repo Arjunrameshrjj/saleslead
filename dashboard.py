@@ -1527,49 +1527,50 @@ def main():
                         
                         st.divider()
                         
-                        # Define color formatting function
-                        def highlight_quality(row):
-                            styles = [''] * len(row)
-                            
-                            # Find column indices
-                            low_quality_idx = row.index.get_loc('Low Quality %') if 'Low Quality %' in row.index else -1
-                            good_quality_idx = row.index.get_loc('Good Quality %') if 'Good Quality %' in row.index else -1
-                            
-                            # Apply red highlight if Low Quality > 40%
-                            if low_quality_idx != -1 and row['Low Quality %'] > 40:
-                                styles[low_quality_idx] = 'background-color:#f8d7da;color:#721c24;font-weight:bold'
-                            
-                            # Apply green highlight if Good Quality > 50%
-                            if good_quality_idx != -1 and row['Good Quality %'] > 50:
-                                styles[good_quality_idx] = 'background-color:#d4edda;color:#155724;font-weight:bold'
-                            
-                            return styles
-                        
-                        # Format the dataframe
+                        # Create a copy for display with formatted percentages
                         display_df = quality_df.copy()
                         
-                        # Format percentage columns
+                        # Store original numeric values for comparison (BEFORE formatting)
+                        low_quality_values = display_df['Low Quality %'].copy()
+                        good_quality_values = display_df['Good Quality %'].copy()
+                        
+                        # Format percentage columns for display (as strings)
                         display_df['Low Quality %'] = display_df['Low Quality %'].apply(lambda x: f"{x:.1f}%")
                         display_df['Good Quality %'] = display_df['Good Quality %'].apply(lambda x: f"{x:.1f}%")
                         
-                        # Apply styling
-                        styled_df = display_df.style.apply(highlight_quality, axis=1)
+                        # Create a helper function for manual highlighting
+                        def apply_manual_highlight(df_display, low_quality_series, good_quality_series):
+                            """Apply manual highlighting based on numeric values"""
+                            highlighted_data = []
+                            
+                            for idx, row in df_display.iterrows():
+                                row_dict = row.to_dict()
+                                
+                                # Add highlighting classes based on numeric values
+                                if low_quality_series.iloc[idx] > 40:
+                                    row_dict['Low Quality %'] = f"<span class='quality-high-red'>{row_dict['Low Quality %']}</span>"
+                                
+                                if good_quality_series.iloc[idx] > 50:
+                                    row_dict['Good Quality %'] = f"<span class='quality-high-green'>{row_dict['Good Quality %']}</span>"
+                                
+                                highlighted_data.append(row_dict)
+                            
+                            return pd.DataFrame(highlighted_data)
                         
-                        # Display the dataframe
+                        # Apply manual highlighting
+                        highlighted_df = apply_manual_highlight(display_df, low_quality_values, good_quality_values)
+                        
+                        # Display the dataframe with HTML formatting
                         st.markdown("#### Course Quality Matrix")
-                        st.dataframe(
-                            styled_df,
-                            use_container_width=True,
-                            height=500
-                        )
+                        st.markdown(highlighted_df.to_html(escape=False, index=False), unsafe_allow_html=True)
                         
                         # Legend
                         st.markdown("""
                         <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; margin-top: 1rem;">
                             <strong>🎯 Quality Metrics Legend:</strong>
                             <ul style="margin-bottom: 0;">
-                                <li><span style="background-color:#f8d7da; padding: 0.2rem 0.5rem; border-radius: 0.2rem; color:#721c24; font-weight:bold;">🔴 RED</span> = Low Quality % > 40% (High Not Interested/Not Qualified)</li>
-                                <li><span style="background-color:#d4edda; padding: 0.2rem 0.5rem; border-radius: 0.2rem; color:#155724; font-weight:bold;">🟢 GREEN</span> = Good Quality % > 50% (High Cold/Warm/Hot leads)</li>
+                                <li><span class="quality-high-red" style="padding: 0.2rem 0.5rem; border-radius: 0.2rem;">🔴 RED</span> = Low Quality % > 40% (High Not Interested/Not Qualified)</li>
+                                <li><span class="quality-high-green" style="padding: 0.2rem 0.5rem; border-radius: 0.2rem;">🟢 GREEN</span> = Good Quality % > 50% (High Cold/Warm/Hot leads)</li>
                                 <li><strong>Low Quality</strong> = Not Interested + Not Qualified</li>
                                 <li><strong>Good Quality</strong> = Cold + Warm + Hot</li>
                             </ul>
@@ -1578,7 +1579,7 @@ def main():
                         
                         # Download button
                         st.divider()
-                        col_dl1, col_dl2 = st.columns(2)
+                        col_dl1, col_dl2, col_dl3 = st.columns(3)
                         
                         with col_dl1:
                             csv_quality = quality_df.to_csv(index=False)
@@ -1591,8 +1592,53 @@ def main():
                             )
                         
                         with col_dl2:
-                            if st.button("📊 View Raw Quality Data", use_container_width=True):
+                            # Show raw numeric data (no formatting)
+                            if st.button("📊 View Raw Numeric Data", use_container_width=True):
                                 st.dataframe(quality_df, use_container_width=True, height=400)
+                        
+                        with col_dl3:
+                            # Show top 5 courses by quality
+                            if st.button("🏆 Show Top 5 Quality Courses", use_container_width=True):
+                                top_courses = quality_df.sort_values('Good Quality %', ascending=False).head(5)
+                                st.dataframe(top_courses[['Course/Program', 'Good Quality %', 'Low Quality %', 'Grand Total']], 
+                                           use_container_width=True)
+                        
+                        # Additional insights
+                        with st.expander("📈 Quality Insights", expanded=False):
+                            # Find best and worst courses
+                            best_course = quality_df.loc[quality_df['Good Quality %'].idxmax()]
+                            worst_course = quality_df.loc[quality_df['Low Quality %'].idxmax()]
+                            
+                            col_ins1, col_ins2 = st.columns(2)
+                            
+                            with col_ins1:
+                                st.markdown("**🏆 Best Quality Course**")
+                                st.metric(
+                                    label=best_course['Course/Program'],
+                                    value=f"{best_course['Good Quality %']:.1f}% Good Quality",
+                                    delta=f"{best_course['Grand Total']} total leads"
+                                )
+                            
+                            with col_ins2:
+                                st.markdown("**⚠️ Highest Low Quality Course**")
+                                st.metric(
+                                    label=worst_course['Course/Program'],
+                                    value=f"{worst_course['Low Quality %']:.1f}% Low Quality",
+                                    delta=f"{worst_course['Grand Total']} total leads"
+                                )
+                            
+                            # Quality distribution
+                            st.markdown("**📊 Quality Distribution**")
+                            high_quality = (quality_df['Good Quality %'] > 50).sum()
+                            medium_quality = ((quality_df['Good Quality %'] >= 30) & (quality_df['Good Quality %'] <= 50)).sum()
+                            low_quality = (quality_df['Good Quality %'] < 30).sum()
+                            
+                            quality_dist = pd.DataFrame({
+                                'Quality Level': ['High (>50%)', 'Medium (30-50%)', 'Low (<30%)'],
+                                'Number of Courses': [high_quality, medium_quality, low_quality]
+                            })
+                            st.dataframe(quality_dist, use_container_width=True)
+                            
                     else:
                         st.info("No course quality data available (no contacts with course information)")
                 else:
