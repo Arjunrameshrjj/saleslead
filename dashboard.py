@@ -405,7 +405,7 @@ def process_contacts_data(contacts):
         last_modified = properties.get("lastmodifieddate", "")
         if last_modified:
             try:
-                last_modified = pd.to_datetime(int(last_modified), unit='ms)
+                last_modified = pd.to_datetime(int(last_modified), unit='ms')
             except:
                 pass
         
