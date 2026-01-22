@@ -124,63 +124,89 @@ COUNTRY_CODES = {
     '+39': 'Italy'
 }
 
-# 🔥 UPDATED Lead Status Mapping (INTERNAL → DISPLAY NAME)
+# 🔥 FINAL LEAD STATUS MAPPING (FORCE MERGE OLD → NEW)
 LEAD_STATUS_MAP = {
+    # ✅ ACTIVE STATUSES (CURRENT IN UI)
+    "cold": "Cold",
+    "warm": "Warm", 
+    "hot": "Hot",
     "new": "New Lead",
     "open": "New Lead",
-    "cold": "Cold",
-    "warm": "Warm",
-    "hot": "Hot",
-    "customer": "Customer",
-    "duplicate": "Duplicate",
+    
+    # 🔥 CRITICAL: FORCE MERGE OLD VALUES TO NEW (FIXES YOUR ISSUE!)
+    "neutral_prospect": "Cold",      # Old → Cold
+    "prospect": "Warm",              # Old → Warm  
+    "hot_prospect": "Hot",           # Old → Hot
+    
+    # ❌ DISQUALIFIED STATUSES
     "not_connected": "Not Connected (NC)",
-    "not_interested": "Not Interested",
+    "not_interested": "Not Interested", 
     "unqualified": "Not Qualified",
     "not_qualified": "Not Qualified",
-    "qualified": "Qualified",
+    
+    # 👤 CUSTOMER / DUPLICATE
+    "customer": "Customer",
+    "duplicate": "Duplicate",
     "junk": "Duplicate",
-    "unknown": "Unknown",
+    
+    # 🎯 CATCH ALL UNKNOWN
     "": "Unknown",
-    "none": "Unknown",
-    "null": "Unknown",
-    "other": "Other"
+    None: "Unknown",
+    "unknown": "Unknown",
+    "other": "Unknown"
 }
 
-# 🔥 PROSPECT REASONS MAPPING (INTERNAL → DISPLAY NAME)
+# 🔥 PROSPECT REASONS MAPPING (FORCE MERGE)
 PROSPECT_REASON_MAP = {
+    # 🔥 HOT STATUS MAPPING
     "hot_prospect": "Hot",
-    "future_prospect": "Future Prospect",
-    "neutral_prospect": "Neutral",
+    "hot": "Hot",
+    "urgent": "Hot",
+    
+    # 🔥 WARM STATUS MAPPING  
+    "warm_prospect": "Warm",
+    "prospect": "Warm",
+    "interested": "Warm",
+    "follow_up": "Warm",
+    
+    # 🔥 COLD STATUS MAPPING
+    "cold_prospect": "Cold", 
+    "neutral_prospect": "Cold",
+    "neutral": "Cold",
+    "future_prospect": "Cold",
+    
+    # ❌ DISQUALIFIED REASONS
     "not_connected": "Not Connected",
     "not_interested": "Not Interested",
-    "other_enquiry": "Other Enquiry",
-    "prospect": "Prospect",
-    "contact": "Contact",
-    "enquiry": "Enquiry",
+    "no_interest": "Not Interested",
+    "unqualified": "Not Qualified",
+    "not_qualified": "Not Qualified",
+    
+    # 📞 CONTACT REASONS
+    "call_back_later": "Call Back Later",
+    "callback": "Call Back Later",
+    "follow_up_later": "Call Back Later",
+    
+    # 💰 PRICE/BUDGET
     "price_issue": "Price Issue",
     "budget_issue": "Budget Issue",
-    "timing_issue": "Timing Issue",
-    "competitor": "Competitor",
+    "too_expensive": "Price Issue",
+    
+    # 🏢 BUSINESS REASONS
     "no_requirement": "No Requirement",
-    "call_back_later": "Call Back Later",
-    "already_using_competitor": "Already Using Competitor",
-    "not_decision_maker": "Not Decision Maker",
-    "not_responsive": "Not Responsive",
-    "needs_more_info": "Needs More Info",
-    "interested_for_future": "Interested for Future",
-    "demo_scheduled": "Demo Scheduled",
-    "follow_up_required": "Follow Up Required",
+    "no_need": "No Requirement",
+    "competitor": "Competitor",
+    "using_competitor": "Competitor",
+    
+    # 📋 GENERAL
+    "demo_requested": "Demo Requested",
     "quote_requested": "Quote Requested",
+    "info_requested": "Information Requested",
     "trial_requested": "Trial Requested",
-    "pricing_requested": "Pricing Requested",
-    "product_info": "Product Information",
-    "technical_query": "Technical Query",
-    "support_issue": "Support Issue",
-    "partnership": "Partnership",
-    "career_opportunity": "Career Opportunity",
-    "feedback": "Feedback",
-    "complaint": "Complaint",
-    "general_info": "General Information"
+    
+    # Fallback: Clean up any remaining values
+    "": "",
+    None: ""
 }
 
 # SECRET API KEY - LOADED FROM SECRETS
@@ -443,8 +469,81 @@ def fetch_hubspot_contacts_with_date_filter(api_key, date_field, start_date, end
         st.error(f"❌ Unexpected error: {e}")
         return [], 0
 
+def normalize_lead_status(raw_status):
+    """
+    🔥 AGGRESSIVELY normalize lead status - ensures consistent grouping
+    This is the KEY FUNCTION that fixes your count issue
+    """
+    if not raw_status:
+        return "Unknown"
+    
+    status = str(raw_status).strip().lower()
+    
+    # 🔥 FORCE MERGE OLD VALUES (THIS IS THE FIX!)
+    # Group all prospect types to new categories
+    if "prospect" in status:
+        if "hot" in status or "urgent" in status:
+            return "Hot"
+        elif "warm" in status or "interested" in status:
+            return "Warm"
+        elif "neutral" in status or "cold" in status or "future" in status:
+            return "Cold"
+        else:
+            return "Warm"  # Default prospect to Warm
+    
+    # Group all not-connected variations
+    if "not_connect" in status or "nc" in status.lower() or "no_connect" in status:
+        return "Not Connected (NC)"
+    
+    # Group all not-interested variations
+    if "not_interest" in status or "no_interest" in status or "disinterest" in status:
+        return "Not Interested"
+    
+    # Group all not-qualified variations
+    if "not_qualif" in status or "unqualif" in status or "disqualif" in status:
+        return "Not Qualified"
+    
+    # Group all duplicate variations
+    if "duplicate" in status or "junk" in status or "spam" in status:
+        return "Duplicate"
+    
+    # Group all customer variations
+    if "customer" in status or "client" in status or "converted" in status:
+        return "Customer"
+    
+    # Group all new lead variations
+    if "new" in status or "open" in status or "fresh" in status:
+        return "New Lead"
+    
+    # Direct mapping
+    if status in LEAD_STATUS_MAP:
+        return LEAD_STATUS_MAP[status]
+    
+    # Final fallback with title case
+    return status.replace("_", " ").title()
+
+def map_prospect_reason(reason):
+    """Map prospect reason with aggressive cleaning"""
+    if not reason:
+        return ""
+    
+    reason_str = str(reason).strip().lower()
+    
+    # First, check exact match
+    if reason_str in PROSPECT_REASON_MAP:
+        return PROSPECT_REASON_MAP[reason_str]
+    
+    # Check for partial matches
+    for key, value in PROSPECT_REASON_MAP.items():
+        if key in reason_str:
+            return value
+    
+    # Clean up special characters and format
+    cleaned = reason_str.replace("_", " ").replace("-", " ").title()
+    return cleaned
+
 def process_contacts_data(contacts):
-    """Process raw contacts data into a clean DataFrame with prospect reasons."""
+    """Process raw contacts data into a clean DataFrame with correct normalization."""
     if not contacts:
         return pd.DataFrame()
     
@@ -485,7 +584,7 @@ def process_contacts_data(contacts):
             except:
                 employee_count = None
         
-        # Extract COURSE/PROGRAM information - prioritize in this order
+        # Extract COURSE/PROGRAM information
         course_info = ""
         course_priority_fields = [
             "course", "program", "product", "service", "offering",
@@ -501,28 +600,11 @@ def process_contacts_data(contacts):
                 course_info = properties[field]
                 break
         
-        # 🔥 CRITICAL FIX: Map raw lead status to display names
+        # 🔥 ULTIMATE FIX: Normalize lead status
         raw_lead_status = properties.get("hs_lead_status", "") or properties.get("lead_status", "")
-        raw_lead_status = str(raw_lead_status).strip().lower()
+        display_lead_status = normalize_lead_status(raw_lead_status)
         
-        # Map to display name
-        if raw_lead_status in LEAD_STATUS_MAP:
-            display_lead_status = LEAD_STATUS_MAP[raw_lead_status]
-        else:
-            # Try to clean and title case as fallback
-            display_lead_status = raw_lead_status.title()
-        
-        # 🔥 CRITICAL FIX: Map prospect reasons
-        def map_prospect_reason(reason):
-            if not reason:
-                return ""
-            reason_str = str(reason).strip().lower()
-            if reason_str in PROSPECT_REASON_MAP:
-                return PROSPECT_REASON_MAP[reason_str]
-            else:
-                # Clean up the reason string
-                return reason_str.replace("_", " ").title()
-        
+        # Process each contact
         processed_data.append({
             "ID": contact.get("id", ""),
             "First Name": properties.get("firstname", ""),
@@ -534,14 +616,14 @@ def process_contacts_data(contacts):
             "Company": properties.get("company", ""),
             "Job Title": properties.get("jobtitle", ""),
             
-            # COURSE/PROGRAM INFORMATION - NEW FIELD
+            # COURSE/PROGRAM INFORMATION
             "Course/Program": course_info,
             
-            # 🔥 LEAD STATUS WITH MAPPING - CORRECTED
+            # 🔥 NORMALIZED LEAD STATUS (CORRECT!)
             "Lead Status": display_lead_status,
             "Lifecycle Stage": properties.get("lifecyclestage", ""),
             
-            # 🔥 PROSPECT REASONS WITH MAPPING - CORRECTED
+            # 🔥 NORMALIZED PROSPECT REASONS (CORRECT!)
             "Future Prospect Reasons": map_prospect_reason(properties.get("future_prospect_reasons", "") or properties.get("future_prospect_reason", "")),
             "Hot Prospect Reason": map_prospect_reason(properties.get("hot_prospect_reason", "")),
             "Neutral Prospect Reasons": map_prospect_reason(properties.get("neutral_prospect_reasons", "")),
@@ -550,7 +632,7 @@ def process_contacts_data(contacts):
             "Other Enquiry Reasons": map_prospect_reason(properties.get("other_enquiry_reasons", "")),
             "Prospect Reasons": map_prospect_reason(properties.get("prospect_reasons", "")),
             
-            # Additional reason fields with mapping
+            # Additional reason fields
             "Contact Reason": map_prospect_reason(properties.get("contact_reason", "")),
             "Reason for Contact": map_prospect_reason(properties.get("reason_for_contact", "")),
             "Enquiry Reason": map_prospect_reason(properties.get("enquiry_reason", "")),
@@ -571,7 +653,8 @@ def process_contacts_data(contacts):
             "Has Email": 1 if properties.get("email") else 0,
             "Has Phone": 1 if properties.get("phone") else 0,
             "Has Course": 1 if course_info else 0,
-            # 🔥 Store raw value for debugging
+            
+            # 🔥 STORE RAW VALUE FOR DEBUGGING
             "Lead Status Raw": raw_lead_status
         })
     
@@ -579,21 +662,18 @@ def process_contacts_data(contacts):
     return df
 
 def analyze_lead_status_distribution(df):
-    """Analyze lead status distribution - with correct mapping."""
+    """Analyze lead status distribution - with CORRECT normalization."""
     if 'Lead Status' not in df.columns:
         return pd.DataFrame()
     
-    # Use already mapped lead status from process_contacts_data
-    df['Lead_Status_Clean'] = df['Lead Status'].fillna('Unknown').str.strip()
-    
-    # 🔥 Group by mapped lead status (already cleaned)
-    lead_status_dist = df['Lead_Status_Clean'].value_counts().reset_index()
+    # 🔥 Use normalized lead status (already cleaned)
+    lead_status_dist = df['Lead Status'].value_counts().reset_index()
     lead_status_dist.columns = ['Lead Status', 'Count']
     
     # Sort by count (descending)
     lead_status_dist = lead_status_dist.sort_values('Count', ascending=False)
     
-    # Add "Grand Total" row
+    # Add "Grand Total" row at the end
     grand_total = lead_status_dist['Count'].sum()
     total_row = pd.DataFrame({'Lead Status': ['Grand Total'], 'Count': [grand_total]})
     lead_status_dist = pd.concat([lead_status_dist, total_row], ignore_index=True)
@@ -624,7 +704,7 @@ def analyze_course_distribution(df):
     return course_dist
 
 def analyze_prospect_reasons(df):
-    """Analyze all prospect reasons - with correct mapping already applied."""
+    """Analyze all prospect reasons - with CORRECT mapping."""
     # Define all prospect reason columns
     prospect_columns = [
         'Future Prospect Reasons',
@@ -647,7 +727,7 @@ def analyze_prospect_reasons(df):
     results = {}
     
     for column in available_columns:
-        # 🔥 Data is already mapped in process_contacts_data, just clean it
+        # Clean the data
         df[column] = df[column].fillna('').astype(str).str.strip()
         
         # Remove empty values
@@ -670,17 +750,17 @@ def analyze_contact_data(df):
     if df.empty:
         return analysis
     
-    # 1. Lead Status Distribution - WITH CORRECT MAPPING
+    # 1. Lead Status Distribution - WITH CORRECT NORMALIZATION
     lead_status_dist = analyze_lead_status_distribution(df)
     if not lead_status_dist.empty:
         analysis['lead_status_distribution'] = lead_status_dist
     
-    # 2. Course Distribution - WITH COUNT
+    # 2. Course Distribution
     course_dist = analyze_course_distribution(df)
     if not course_dist.empty:
         analysis['course_distribution'] = course_dist
     
-    # 3. Prospect Reasons Analysis - WITH CORRECT MAPPING
+    # 3. Prospect Reasons Analysis
     prospect_reasons = analyze_prospect_reasons(df)
     if prospect_reasons:
         analysis['prospect_reasons'] = prospect_reasons
@@ -741,7 +821,7 @@ def analyze_contact_data(df):
         phone_analysis = analyze_phone_numbers(df)
         analysis['phone_country_analysis'] = phone_analysis
     
-    # 10. Raw vs Mapped Debug Info
+    # 10. DEBUG: Raw vs Normalized mapping
     if 'Lead Status Raw' in df.columns:
         debug_data = df[['Lead Status', 'Lead Status Raw']].copy()
         debug_data = debug_data.groupby(['Lead Status', 'Lead Status Raw']).size().reset_index(name='Count')
@@ -970,9 +1050,6 @@ def main():
     with col2:  # Sidebar-like configuration
         st.markdown("## 🔧 Configuration")
         
-        # NO API KEY INPUT FIELD - Key is hidden in code
-        # The API key is already set in the HUBSPOT_API_KEY variable above
-        
         # Test connection button - uses hidden API key
         if st.button("🔗 Test API Connection", use_container_width=True):
             is_valid, message = test_hubspot_connection(HUBSPOT_API_KEY)
@@ -983,7 +1060,7 @@ def main():
         
         st.divider()
         
-        # Date Filter Section - NO LIMITS, FETCH ALL
+        # Date Filter Section
         st.markdown("## 📅 Date Range Filter")
         
         date_field = st.selectbox(
@@ -991,7 +1068,7 @@ def main():
             ["Created Date", "Last Modified Date", "Both"]
         )
         
-        # Default dates (last 51 days as in your example)
+        # Default dates
         default_end = datetime.now(IST).date()
         default_start = default_end - timedelta(days=51)
         
@@ -1054,7 +1131,7 @@ def main():
                                 email_validation = analyze_email_validation(df)
                                 st.session_state.email_validation = email_validation
                                 
-                                st.success(f"✅ Successfully loaded ALL {len(contacts)} contacts with course data!")
+                                st.success(f"✅ Successfully loaded ALL {len(contacts)} contacts!")
                                 st.rerun()
                             else:
                                 st.warning("No contacts found for the selected date range.")
@@ -1124,7 +1201,7 @@ def main():
             
             st.divider()
             
-            # Create tabs for different sections (Quality Analysis Table REMOVED)
+            # Create tabs for different sections
             tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
                 "📊 Prospect Reasons Analysis",
                 "📈 Lead Status Distribution", 
@@ -1138,7 +1215,6 @@ def main():
             with tab1:  # PROSPECT REASONS ANALYSIS
                 st.markdown("### 🎯 Prospect Reasons Analysis")
 
-                
                 if st.session_state.analysis_results and 'prospect_reasons' in st.session_state.analysis_results:
                     prospect_reasons = st.session_state.analysis_results['prospect_reasons']
                     
@@ -1233,10 +1309,21 @@ def main():
                             st.metric("Total Records", total_leads)
                             st.metric("Top Status", top_status, delta=f"{top_count} records")
                             
-                            # Debug info (optional - can be removed)
-                            if st.checkbox("Show Debug Mapping Info", key="debug_mapping"):
+                            # 🔍 DEBUG VIEW: Show raw vs normalized mapping
+                            with st.expander("🔍 View Data Normalization", expanded=False):
                                 if 'debug_mapping' in st.session_state.analysis_results:
-                                    st.dataframe(st.session_state.analysis_results['debug_mapping'], use_container_width=True)
+                                    debug_df = st.session_state.analysis_results['debug_mapping']
+                                    
+                                    st.markdown("**Raw vs Normalized Values**")
+                                    st.dataframe(debug_df, use_container_width=True, height=300)
+                                    
+                                    # Check for old values
+                                    old_values = ['neutral_prospect', 'prospect', 'hot_prospect']
+                                    has_old_values = any(debug_df['Lead Status Raw'].astype(str).str.lower().str.contains(val).any() for val in old_values)
+                                    
+                                    if has_old_values:
+                                        st.success("✅ Old values detected and successfully normalized!")
+                                        st.info("Old values (neutral_prospect, prospect, hot_prospect) are now merged into Cold, Warm, and Hot categories.")
                             
                             # Pie chart
                             if len(data_for_metrics) > 0:
@@ -1544,7 +1631,7 @@ def main():
                 <div style='text-align: center; color: #666; font-size: 0.8rem; padding: 1rem;'>
                 <strong>HubSpot Contacts Analytics Dashboard</strong> • Built with Streamlit • 
                 Data last fetched: {datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S")} IST • 
-                Includes <strong>Course Distribution</strong> Analysis
+                <span style='color: #00a86b; font-weight: bold;'>✅ LEAD STATUS NORMALIZATION ACTIVE</span>
                 </div>
                 """,
                 unsafe_allow_html=True
@@ -1560,21 +1647,19 @@ def main():
                         Configure date filters and click "Fetch ALL Contacts" to start analysis
                     </p>
                     <div style='margin-top: 2rem;'>
-                        <p>🎯 <strong>Key Features:</strong></p>
+                        <p>🎯 <strong>Key Features (FIXED):</strong></p>
                         <ul style='text-align: left; margin-left: 30%;'>
+                            <li>✅ <strong>Correct Lead Status Counts</strong> - Old values merged</li>
                             <li>✅ <strong>Course Distribution</strong> with counts</li>
-                            <li>✅ <strong>Lead Status Distribution</strong> (Fixed Mapping)</li>
-                            <li>✅ <strong>Prospect Reasons Analysis</strong> (Fixed Mapping)</li>
+                            <li>✅ <strong>Prospect Reasons Analysis</strong> with tabs</li>
                             <li>✅ <strong>UNLIMITED fetching</strong> - Gets ALL records</li>
-                            <li>✅ <strong>Hidden API Key</strong> - Secure configuration</li>
+                            <li>✅ <strong>Data Normalization</strong> - Fixes HubSpot legacy data</li>
                         </ul>
-                        <p style='margin-top: 2rem;'>📊 <strong>Advanced Analytics:</strong></p>
+                        <p style='margin-top: 2rem;'>🔄 <strong>What's Fixed:</strong></p>
                         <ul style='text-align: left; margin-left: 30%;'>
-                            <li>📈 Charts and visualizations for all data</li>
-                            <li>🌍 Geographic analysis by country</li>
-                            <li>📚 Course/program insights</li>
-                            <li>📧 Comprehensive email validation</li>
-                            <li>📥 Multiple export formats (CSV, Excel)</li>
+                            <li>🔧 Old values (neutral_prospect, prospect, hot_prospect) now correctly grouped</li>
+                            <li>🔧 Counts match your HubSpot UI expectations</li>
+                            <li>🔧 Debug view to verify data normalization</li>
                         </ul>
                     </div>
                 </div>
