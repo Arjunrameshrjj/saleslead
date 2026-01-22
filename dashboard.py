@@ -97,6 +97,16 @@ st.markdown("""
         display: inline-block;
         margin: 0.2rem;
     }
+    .quality-high-red {
+        background-color: #f8d7da !important;
+        color: #721c24 !important;
+        font-weight: bold;
+    }
+    .quality-high-green {
+        background-color: #d4edda !important;
+        color: #155724 !important;
+        font-weight: bold;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -661,6 +671,76 @@ def process_contacts_data(contacts):
     df = pd.DataFrame(processed_data)
     return df
 
+def build_course_quality_table(df):
+    """
+    🎯 BUILD COURSE QUALITY TABLE (PIVOT STYLE)
+    Creates a matrix showing course-wise lead status distribution with quality metrics
+    """
+    # Keep only records with course info
+    df_with_course = df[df['Course/Program'].notna() & (df['Course/Program'] != '')].copy()
+    
+    if df_with_course.empty:
+        return pd.DataFrame()
+    
+    # Clean course names
+    df_with_course['Course_Clean'] = df_with_course['Course/Program'].str.strip()
+    
+    # Create pivot table: Course × Lead Status
+    pivot = pd.pivot_table(
+        df_with_course,
+        index='Course_Clean',
+        columns='Lead Status',
+        values='ID',
+        aggfunc='count',
+        fill_value=0
+    )
+    
+    # Reset index to make Course_Clean a column
+    pivot = pivot.reset_index()
+    
+    # Rename columns for consistency
+    pivot = pivot.rename(columns={'Course_Clean': 'Course/Program'})
+    
+    # Define required columns in specific order
+    required_columns = [
+        'Course/Program',
+        'Not Connected (NC)', 
+        'Not Interested', 
+        'Not Qualified',
+        'Cold', 
+        'Duplicate', 
+        'Warm', 
+        'Hot', 
+        'Future Prospect',
+        'Customer',
+        'New Lead'
+    ]
+    
+    # Add missing columns with 0 values
+    for col in required_columns:
+        if col not in pivot.columns:
+            pivot[col] = 0
+    
+    # Reorder columns
+    pivot = pivot[required_columns]
+    
+    # Calculate Quality Metrics
+    pivot['Low Quality Leads'] = pivot['Not Interested'] + pivot['Not Qualified']
+    pivot['Good Quality Leads'] = pivot['Cold'] + pivot['Warm'] + pivot['Hot']
+    
+    # Calculate Grand Total (sum of all lead status columns)
+    status_columns = [col for col in required_columns if col != 'Course/Program']
+    pivot['Grand Total'] = pivot[status_columns].sum(axis=1)
+    
+    # Calculate percentages
+    pivot['Low Quality %'] = (pivot['Low Quality Leads'] / pivot['Grand Total'] * 100).round(1)
+    pivot['Good Quality %'] = (pivot['Good Quality Leads'] / pivot['Grand Total'] * 100).round(1)
+    
+    # Sort by Grand Total descending
+    pivot = pivot.sort_values('Grand Total', ascending=False)
+    
+    return pivot
+
 def analyze_lead_status_distribution(df):
     """Analyze lead status distribution - with CORRECT normalization."""
     if 'Lead Status' not in df.columns:
@@ -821,7 +901,12 @@ def analyze_contact_data(df):
         phone_analysis = analyze_phone_numbers(df)
         analysis['phone_country_analysis'] = phone_analysis
     
-    # 10. DEBUG: Raw vs Normalized mapping
+    # 10. 🔥 NEW: Course Quality Analysis
+    course_quality = build_course_quality_table(df)
+    if not course_quality.empty:
+        analysis['course_quality'] = course_quality
+    
+    # 11. DEBUG: Raw vs Normalized mapping
     if 'Lead Status Raw' in df.columns:
         debug_data = df[['Lead Status', 'Lead Status Raw']].copy()
         debug_data = debug_data.groupby(['Lead Status', 'Lead Status Raw']).size().reset_index(name='Count')
@@ -1088,7 +1173,8 @@ def main():
                 ⚠️ <strong>Note:</strong> This fetches ALL data including:<br>
                 • Lead Status & Prospect Reasons<br>
                 • Course/Program Information<br>
-                • Contact details & Analytics
+                • Contact details & Analytics<br>
+                • <strong>NEW:</strong> Course Quality Analysis
             </div>
             """,
             unsafe_allow_html=True
@@ -1201,11 +1287,12 @@ def main():
             
             st.divider()
             
-            # Create tabs for different sections
-            tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+            # Create tabs for different sections - ADDED NEW TAB
+            tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
                 "📊 Prospect Reasons Analysis",
                 "📈 Lead Status Distribution", 
                 "📚 Course Distribution",
+                "🎯 Course Quality Analysis",  # NEW TAB
                 "🔍 Analytics Dashboard", 
                 "🌍 Geographic Analysis", 
                 "📧 Email Validation",
@@ -1415,7 +1502,103 @@ def main():
                 else:
                     st.info("No course distribution analysis available")
             
-            with tab4:  # Analytics Dashboard
+            with tab4:  # 🎯 NEW: COURSE QUALITY ANALYSIS
+                st.markdown("### 🎯 Course-wise Lead Quality Analysis")
+                st.markdown("*Pivot table showing lead status distribution by course/program with quality metrics*")
+                
+                if st.session_state.analysis_results and 'course_quality' in st.session_state.analysis_results:
+                    quality_df = st.session_state.analysis_results['course_quality']
+                    
+                    if not quality_df.empty:
+                        # Display metrics summary
+                        col_q1, col_q2, col_q3 = st.columns(3)
+                        
+                        with col_q1:
+                            total_courses = len(quality_df)
+                            st.metric("Total Courses", total_courses)
+                        
+                        with col_q2:
+                            avg_low_quality = quality_df['Low Quality %'].mean()
+                            st.metric("Avg Low Quality %", f"{avg_low_quality:.1f}%")
+                        
+                        with col_q3:
+                            avg_good_quality = quality_df['Good Quality %'].mean()
+                            st.metric("Avg Good Quality %", f"{avg_good_quality:.1f}%")
+                        
+                        st.divider()
+                        
+                        # Define color formatting function
+                        def highlight_quality(row):
+                            styles = [''] * len(row)
+                            
+                            # Find column indices
+                            low_quality_idx = row.index.get_loc('Low Quality %') if 'Low Quality %' in row.index else -1
+                            good_quality_idx = row.index.get_loc('Good Quality %') if 'Good Quality %' in row.index else -1
+                            
+                            # Apply red highlight if Low Quality > 40%
+                            if low_quality_idx != -1 and row['Low Quality %'] > 40:
+                                styles[low_quality_idx] = 'background-color:#f8d7da;color:#721c24;font-weight:bold'
+                            
+                            # Apply green highlight if Good Quality > 50%
+                            if good_quality_idx != -1 and row['Good Quality %'] > 50:
+                                styles[good_quality_idx] = 'background-color:#d4edda;color:#155724;font-weight:bold'
+                            
+                            return styles
+                        
+                        # Format the dataframe
+                        display_df = quality_df.copy()
+                        
+                        # Format percentage columns
+                        display_df['Low Quality %'] = display_df['Low Quality %'].apply(lambda x: f"{x:.1f}%")
+                        display_df['Good Quality %'] = display_df['Good Quality %'].apply(lambda x: f"{x:.1f}%")
+                        
+                        # Apply styling
+                        styled_df = display_df.style.apply(highlight_quality, axis=1)
+                        
+                        # Display the dataframe
+                        st.markdown("#### Course Quality Matrix")
+                        st.dataframe(
+                            styled_df,
+                            use_container_width=True,
+                            height=500
+                        )
+                        
+                        # Legend
+                        st.markdown("""
+                        <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; margin-top: 1rem;">
+                            <strong>🎯 Quality Metrics Legend:</strong>
+                            <ul style="margin-bottom: 0;">
+                                <li><span style="background-color:#f8d7da; padding: 0.2rem 0.5rem; border-radius: 0.2rem; color:#721c24; font-weight:bold;">🔴 RED</span> = Low Quality % > 40% (High Not Interested/Not Qualified)</li>
+                                <li><span style="background-color:#d4edda; padding: 0.2rem 0.5rem; border-radius: 0.2rem; color:#155724; font-weight:bold;">🟢 GREEN</span> = Good Quality % > 50% (High Cold/Warm/Hot leads)</li>
+                                <li><strong>Low Quality</strong> = Not Interested + Not Qualified</li>
+                                <li><strong>Good Quality</strong> = Cold + Warm + Hot</li>
+                            </ul>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        # Download button
+                        st.divider()
+                        col_dl1, col_dl2 = st.columns(2)
+                        
+                        with col_dl1:
+                            csv_quality = quality_df.to_csv(index=False)
+                            st.download_button(
+                                "📥 Download Course Quality Data",
+                                csv_quality,
+                                "course_quality_analysis.csv",
+                                "text/csv",
+                                use_container_width=True
+                            )
+                        
+                        with col_dl2:
+                            if st.button("📊 View Raw Quality Data", use_container_width=True):
+                                st.dataframe(quality_df, use_container_width=True, height=400)
+                    else:
+                        st.info("No course quality data available (no contacts with course information)")
+                else:
+                    st.info("No course quality analysis available")
+            
+            with tab5:  # Analytics Dashboard
                 st.markdown("### 📈 Comprehensive Analytics")
                 
                 if st.session_state.analysis_results and st.session_state.visualizations:
@@ -1480,7 +1663,7 @@ def main():
                         if 'completeness' in analysis:
                             st.dataframe(analysis['completeness'], use_container_width=True, height=300)
             
-            with tab5:  # Geographic Analysis
+            with tab6:  # Geographic Analysis
                 st.markdown("### 🌍 Geographic Distribution")
                 
                 if st.session_state.analysis_results:
@@ -1504,7 +1687,7 @@ def main():
                         # Country data table
                         st.dataframe(country_data, use_container_width=True, height=400)
             
-            with tab6:  # Email Validation
+            with tab7:  # Email Validation
                 st.markdown("### 📧 Email Validation")
                 
                 if st.session_state.email_validation is not None:
@@ -1535,7 +1718,7 @@ def main():
                     else:
                         st.success("✅ All emails appear valid!")
             
-            with tab7:  # Export Data
+            with tab8:  # Export Data
                 st.markdown("### 📥 Export Options")
                 
                 # First row of export buttons
@@ -1582,7 +1765,7 @@ def main():
                 st.markdown("#### Export Individual Analyses")
                 
                 if st.session_state.analysis_results:
-                    export_row2 = st.columns(3)
+                    export_row2 = st.columns(4)
                     
                     with export_row2[0]:
                         if 'lead_status_distribution' in st.session_state.analysis_results:
@@ -1607,6 +1790,17 @@ def main():
                             )
                     
                     with export_row2[2]:
+                        if 'course_quality' in st.session_state.analysis_results:
+                            csv = st.session_state.analysis_results['course_quality'].to_csv(index=False)
+                            st.download_button(
+                                "🎯 Course Quality",
+                                csv,
+                                "course_quality_analysis.csv",
+                                "text/csv",
+                                use_container_width=True
+                            )
+                    
+                    with export_row2[3]:
                         if 'prospect_reasons' in st.session_state.analysis_results:
                             # Combine all prospect reasons
                             all_reasons = pd.DataFrame()
@@ -1631,7 +1825,8 @@ def main():
                 <div style='text-align: center; color: #666; font-size: 0.8rem; padding: 1rem;'>
                 <strong>HubSpot Contacts Analytics Dashboard</strong> • Built with Streamlit • 
                 Data last fetched: {datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S")} IST • 
-                <span style='color: #00a86b; font-weight: bold;'>✅ LEAD STATUS NORMALIZATION ACTIVE</span>
+                <span style='color: #00a86b; font-weight: bold;'>✅ LEAD STATUS NORMALIZATION ACTIVE</span> • 
+                <span style='color: #1a73e8; font-weight: bold;'>🎯 COURSE QUALITY ANALYSIS ENABLED</span>
                 </div>
                 """,
                 unsafe_allow_html=True
@@ -1647,19 +1842,21 @@ def main():
                         Configure date filters and click "Fetch ALL Contacts" to start analysis
                     </p>
                     <div style='margin-top: 2rem;'>
-                        <p>🎯 <strong>Key Features (FIXED):</strong></p>
+                        <p>🎯 <strong>Key Features (FIXED & ENHANCED):</strong></p>
                         <ul style='text-align: left; margin-left: 30%;'>
+                            <li>✅ <strong>Course Quality Analysis</strong> - NEW Pivot Table</li>
                             <li>✅ <strong>Correct Lead Status Counts</strong> - Old values merged</li>
                             <li>✅ <strong>Course Distribution</strong> with counts</li>
                             <li>✅ <strong>Prospect Reasons Analysis</strong> with tabs</li>
                             <li>✅ <strong>UNLIMITED fetching</strong> - Gets ALL records</li>
-                            <li>✅ <strong>Data Normalization</strong> - Fixes HubSpot legacy data</li>
                         </ul>
-                        <p style='margin-top: 2rem;'>🔄 <strong>What's Fixed:</strong></p>
+                        <p style='margin-top: 2rem;'>📊 <strong>New Course Quality Analysis Includes:</strong></p>
                         <ul style='text-align: left; margin-left: 30%;'>
-                            <li>🔧 Old values (neutral_prospect, prospect, hot_prospect) now correctly grouped</li>
-                            <li>🔧 Counts match your HubSpot UI expectations</li>
-                            <li>🔧 Debug view to verify data normalization</li>
+                            <li>🎯 <strong>Pivot Table</strong> - Course × Lead Status matrix</li>
+                            <li>🔴 <strong>Low Quality Leads</strong> = Not Interested + Not Qualified</li>
+                            <li>🟢 <strong>Good Quality Leads</strong> = Cold + Warm + Hot</li>
+                            <li>📈 <strong>Conditional Formatting</strong> - Red/Green highlights</li>
+                            <li>📥 <strong>Export Ready</strong> - Download complete analysis</li>
                         </ul>
                     </div>
                 </div>
