@@ -1580,10 +1580,10 @@ def main():
                 unsafe_allow_html=True
             )
             
-            # Key Metrics at the top
+            # 🔥 ONLY 4 KPI METRICS (as requested)
             st.markdown("## 📈 Key Performance Indicators")
             
-            metric_col1, metric_col2, metric_col3, metric_col4, metric_col5, metric_col6 = st.columns(6)
+            metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
             
             with metric_col1:
                 total_contacts = len(df)
@@ -1603,16 +1603,6 @@ def main():
                 course_count = df['Has Course'].sum()
                 course_percent = (course_count / len(df)) * 100 if len(df) > 0 else 0
                 st.metric("With Course", f"{course_count:,} ({course_percent:.1f}%)")
-            
-            with metric_col5:
-                campaign_count = df['Has Campaign'].sum()
-                campaign_percent = (campaign_count / len(df)) * 100 if len(df) > 0 else 0
-                st.metric("With Campaign", f"{campaign_count:,} ({campaign_percent:.1f}%)")
-            
-            with metric_col6:
-                drilldown2_count = df['Has Drilldown 2'].sum()
-                drilldown2_percent = (drilldown2_count / len(df)) * 100 if len(df) > 0 else 0
-                st.metric("With Drill-Down 2", f"{drilldown2_count:,} ({drilldown2_percent:.1f}%)")
             
             st.divider()
             
@@ -2189,7 +2179,7 @@ def main():
                                     
                                     st.dataframe(dd2_performance, use_container_width=True)
                             
-                        # 🔥 DEEP DRILL-DOWN TO SPECIFIC PATH
+                        # 🔥 DEEP DRILL-DOWN TO SPECIFIC PATH (FIXED DATE ERROR)
                         with st.expander("🔍 Deep Drill-Down to Specific Path", expanded=False):
                             if not filtered_df.empty:
                                 # Create path identifiers for selection
@@ -2235,7 +2225,19 @@ def main():
                                             st.metric("Drill-Down 2", drilldown_value[:20])
                                         
                                         with col_pd4:
-                                            avg_creation = path_contacts['Created Date'].mean().strftime('%Y-%m-%d') if not path_contacts['Created Date'].isna().all() else "N/A"
+                                            # 🔥 FIXED: Handle date properly
+                                            if not path_contacts['Created Date'].isna().all():
+                                                # Get mean as timestamp and convert to date
+                                                try:
+                                                    avg_timestamp = path_contacts['Created Date'].dropna().mean()
+                                                    if pd.notnull(avg_timestamp):
+                                                        avg_creation = avg_timestamp.strftime('%Y-%m-%d')
+                                                    else:
+                                                        avg_creation = "N/A"
+                                                except:
+                                                    avg_creation = "Error"
+                                            else:
+                                                avg_creation = "N/A"
                                             st.metric("Avg Creation Date", avg_creation)
                                         
                                         # Lead status breakdown for this path
