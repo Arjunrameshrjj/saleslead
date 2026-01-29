@@ -124,6 +124,29 @@ st.markdown("""
         display: inline-block;
         margin: 0.1rem;
     }
+    .drilldown-badge {
+        background-color: #fff3cd;
+        color: #856404;
+        padding: 0.2rem 0.6rem;
+        border-radius: 0.8rem;
+        font-size: 0.8rem;
+        display: inline-block;
+        margin: 0.1rem;
+    }
+    .hierarchy-level-1 {
+        font-weight: bold;
+        color: #1a73e8;
+    }
+    .hierarchy-level-2 {
+        font-weight: bold;
+        color: #ff6b35;
+        padding-left: 1rem;
+    }
+    .hierarchy-level-3 {
+        color: #34a853;
+        padding-left: 2rem;
+        font-style: italic;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -434,13 +457,15 @@ def fetch_hubspot_contacts_with_date_filter(api_key, date_field, start_date, end
     status_text = st.empty()
     status_text.text(f"📡 Fetching ALL contacts with {date_field} filter from {start_date} to {end_date}...")
     
-    # 🔥 IMPORTANT: Added Campaign/Traffic Source properties
+    # 🔥 IMPORTANT: Added Campaign/Traffic Source properties INCLUDING DRILL-DOWN 2
     all_properties = [
         # Lead status and basic info
         "hs_lead_status", "lifecyclestage", "hubspot_owner_id",
         
-        # 🔥 CAMPAIGN & TRAFFIC SOURCE PROPERTIES (NEW)
-        "hs_analytics_source", "hs_analytics_source_data_1",
+        # 🔥 CAMPAIGN & TRAFFIC SOURCE PROPERTIES (COMPLETE HIERARCHY)
+        "hs_analytics_source",                     # Original Traffic Source
+        "hs_analytics_source_data_1",              # Drill-Down 1 (Campaign/Referrer)
+        "hs_analytics_source_data_2",              # 🔥 NEW: Drill-Down 2 (Ad/Keyword/Placement)
         "hs_campaign_name", "hs_utm_source", "hs_utm_medium",
         "hs_utm_campaign", "hs_utm_content", "hs_utm_term",
         
@@ -728,9 +753,12 @@ def process_contacts_data(contacts):
         raw_lead_status = properties.get("hs_lead_status", "") or properties.get("lead_status", "")
         display_lead_status = normalize_lead_status(raw_lead_status)
         
-        # 🔥 NEW: Extract Campaign & Traffic Source data
+        # 🔥 COMPLETE HIERARCHY: Extract Campaign & Traffic Source data
         traffic_source = properties.get("hs_analytics_source", "")
         campaign_name = properties.get("hs_analytics_source_data_1", "") or properties.get("hs_campaign_name", "")
+        
+        # 🔥 NEW: Drill-Down 2 (Ad/Keyword/Placement)
+        campaign_drilldown_2 = properties.get("hs_analytics_source_data_2", "")
         
         # Normalize traffic source
         normalized_traffic_source = normalize_traffic_source(traffic_source)
@@ -754,10 +782,11 @@ def process_contacts_data(contacts):
             "Lead Status": display_lead_status,
             "Lifecycle Stage": properties.get("lifecyclestage", ""),
             
-            # 🔥 NEW: CAMPAIGN & TRAFFIC SOURCE DATA
+            # 🔥 COMPLETE HIERARCHY: CAMPAIGN & TRAFFIC SOURCE DATA
             "Traffic Source": normalized_traffic_source,
             "Traffic Source Raw": traffic_source,
             "Campaign Name": campaign_name,
+            "Campaign Drilldown 2": campaign_drilldown_2,  # 🔥 NEW
             "UTM Source": properties.get("hs_utm_source", ""),
             "UTM Medium": properties.get("hs_utm_medium", ""),
             "UTM Campaign": properties.get("hs_utm_campaign", ""),
@@ -794,6 +823,7 @@ def process_contacts_data(contacts):
             "Has Course": 1 if course_info else 0,
             "Has Traffic Source": 1 if traffic_source else 0,
             "Has Campaign": 1 if campaign_name else 0,
+            "Has Drilldown 2": 1 if campaign_drilldown_2 else 0,  # 🔥 NEW
             
             # 🔥 STORE RAW VALUE FOR DEBUGGING
             "Lead Status Raw": raw_lead_status
@@ -876,8 +906,8 @@ def build_course_quality_table(df):
 
 def build_campaign_performance_table(df):
     """
-    🎯 BUILD CAMPAIGN PERFORMANCE TABLE (PIVOT STYLE)
-    Creates a matrix showing Campaign-wise lead status distribution
+    🎯 BUILD COMPLETE CAMPAIGN PERFORMANCE TABLE (PIVOT STYLE)
+    Creates a matrix showing full 3-level hierarchy: Traffic Source → Campaign → Drill-Down 2 → Lead Status
     """
     # Keep only records with campaign info
     df_with_campaign = df[
@@ -890,33 +920,40 @@ def build_campaign_performance_table(df):
     if df_with_campaign.empty:
         return pd.DataFrame()
     
-    # Clean campaign names
-    df_with_campaign['Campaign_Clean'] = df_with_campaign['Campaign Name'].str.strip()
+    # Clean all hierarchy columns
     df_with_campaign['Traffic_Source_Clean'] = df_with_campaign['Traffic Source'].str.strip()
+    df_with_campaign['Campaign_Clean'] = df_with_campaign['Campaign Name'].str.strip()
+    df_with_campaign['Campaign_Drilldown_2'] = df_with_campaign['Campaign Drilldown 2'].fillna('').astype(str).str.strip()
     
-    # Create pivot table: Campaign × Lead Status
+    # 🔥 COMPLETE 3-LEVEL HIERARCHY PIVOT
     pivot = pd.pivot_table(
         df_with_campaign,
-        index=['Traffic_Source_Clean', 'Campaign_Clean'],
+        index=[
+            'Traffic_Source_Clean',      # Level 1: Traffic Source
+            'Campaign_Clean',            # Level 2: Campaign Name
+            'Campaign_Drilldown_2'       # 🔥 Level 3: Drill-Down 2
+        ],
         columns='Lead Status',
         values='ID',
         aggfunc='count',
         fill_value=0
     )
     
-    # Reset index to make Campaign a column
+    # Reset index to make hierarchy columns regular columns
     pivot = pivot.reset_index()
     
     # Rename columns for consistency
     pivot = pivot.rename(columns={
         'Traffic_Source_Clean': 'Traffic Source',
-        'Campaign_Clean': 'Campaign Name'
+        'Campaign_Clean': 'Campaign Name',
+        'Campaign_Drilldown_2': 'Campaign Drilldown 2'  # 🔥 Keep exact name
     })
     
-    # Define required columns in specific order (matching your requirement)
+    # Define required columns in specific order (complete hierarchy)
     required_columns = [
         'Traffic Source',
         'Campaign Name',
+        'Campaign Drilldown 2',  # 🔥 NEW LEVEL
         'Cold',
         'Warm',
         'Hot',
@@ -939,7 +976,7 @@ def build_campaign_performance_table(df):
     pivot = pivot[required_columns]
     
     # Calculate Grand Total (sum of all lead status columns)
-    status_columns = [col for col in required_columns if col not in ['Traffic Source', 'Campaign Name']]
+    status_columns = [col for col in required_columns if col not in ['Traffic Source', 'Campaign Name', 'Campaign Drilldown 2']]
     pivot['Grand Total'] = pivot[status_columns].sum(axis=1)
     
     # Calculate Quality Metrics
@@ -950,8 +987,8 @@ def build_campaign_performance_table(df):
     pivot['Quality Leads %'] = (pivot['Quality Leads (Hot+Warm+Customer)'] / pivot['Grand Total'] * 100).round(1)
     pivot['Disqualified %'] = (pivot['Disqualified Leads'] / pivot['Grand Total'] * 100).round(1)
     
-    # Sort by Quality Leads % descending
-    pivot = pivot.sort_values(['Quality Leads %', 'Grand Total'], ascending=[False, False])
+    # Sort by Traffic Source, then Quality Leads % descending
+    pivot = pivot.sort_values(['Traffic Source', 'Campaign Name', 'Quality Leads %'], ascending=[True, True, False])
     
     return pivot
 
@@ -1119,22 +1156,24 @@ def analyze_contact_data(df):
     
     # 9. Contact Completeness Analysis
     completeness_data = {
-        'Field': ['Email', 'Phone', 'Lead Status', 'Course/Program', 'Traffic Source', 'Campaign Name'],
+        'Field': ['Email', 'Phone', 'Lead Status', 'Course/Program', 'Traffic Source', 'Campaign Name', 'Drill-Down 2'],
         'Count': [
-            df['Email'].notna().sum(),
-            df['Phone'].notna().sum(),
+            df['Has Email'].sum(),
+            df['Has Phone'].sum(),
             df['Lead Status'].notna().sum(),
             df['Has Course'].sum(),
             df['Has Traffic Source'].sum(),
-            df['Has Campaign'].sum()
+            df['Has Campaign'].sum(),
+            df['Has Drilldown 2'].sum()  # 🔥 NEW
         ],
         'Percentage': [
-            (df['Email'].notna().sum() / len(df)) * 100,
-            (df['Phone'].notna().sum() / len(df)) * 100,
+            (df['Has Email'].sum() / len(df)) * 100,
+            (df['Has Phone'].sum() / len(df)) * 100,
             (df['Lead Status'].notna().sum() / len(df)) * 100,
             (df['Has Course'].sum() / len(df)) * 100,
             (df['Has Traffic Source'].sum() / len(df)) * 100,
-            (df['Has Campaign'].sum() / len(df)) * 100
+            (df['Has Campaign'].sum() / len(df)) * 100,
+            (df['Has Drilldown 2'].sum() / len(df)) * 100  # 🔥 NEW
         ]
     }
     analysis['completeness'] = pd.DataFrame(completeness_data)
@@ -1144,12 +1183,12 @@ def analyze_contact_data(df):
         phone_analysis = analyze_phone_numbers(df)
         analysis['phone_country_analysis'] = phone_analysis
     
-    # 11. 🔥 NEW: Course Quality Analysis
+    # 11. 🔥 Course Quality Analysis
     course_quality = build_course_quality_table(df)
     if not course_quality.empty:
         analysis['course_quality'] = course_quality
     
-    # 12. 🔥 NEW: Campaign Performance Analysis
+    # 12. 🔥 COMPLETE Campaign Performance Analysis (3-Level Hierarchy)
     campaign_performance = build_campaign_performance_table(df)
     if not campaign_performance.empty:
         analysis['campaign_performance'] = campaign_performance
@@ -1451,10 +1490,10 @@ def main():
                 ⚠️ <strong>Note:</strong> This fetches ALL data including:<br>
                 • Lead Status & Prospect Reasons<br>
                 • Course/Program Information<br>
-                • <strong>NEW:</strong> Campaign & Traffic Source Data<br>
+                • <strong>COMPLETE HIERARCHY:</strong> Traffic Source → Campaign → Drill-Down 2<br>
                 • Contact details & Analytics<br>
                 • Course Quality Analysis<br>
-                • <strong>NEW:</strong> Campaign Performance Analysis
+                • <strong>3-LEVEL:</strong> Campaign Performance Analysis
             </div>
             """,
             unsafe_allow_html=True
@@ -1472,7 +1511,7 @@ def main():
                 if start_date > end_date:
                     st.error("Start date must be before end date.")
                 else:
-                    with st.spinner("Fetching ALL contacts with campaign & traffic data..."):
+                    with st.spinner("Fetching ALL contacts with COMPLETE campaign hierarchy..."):
                         # Test connection first
                         success, message = test_hubspot_connection(HUBSPOT_API_KEY)
                         
@@ -1497,7 +1536,7 @@ def main():
                                 email_validation = analyze_email_validation(df)
                                 st.session_state.email_validation = email_validation
                                 
-                                st.success(f"✅ Successfully loaded ALL {len(contacts)} contacts!")
+                                st.success(f"✅ Successfully loaded ALL {len(contacts)} contacts with COMPLETE hierarchy!")
                                 st.rerun()
                             else:
                                 st.warning("No contacts found for the selected date range.")
@@ -1518,7 +1557,7 @@ def main():
                         email_validation = analyze_email_validation(df)
                         st.session_state.email_validation = email_validation
                         
-                        st.success("Analysis refreshed!")
+                        st.success("Analysis refreshed with COMPLETE hierarchy!")
                         st.rerun()
         
         if st.button("🗑️ Clear All Data", use_container_width=True):
@@ -1544,7 +1583,7 @@ def main():
             # Key Metrics at the top
             st.markdown("## 📈 Key Performance Indicators")
             
-            metric_col1, metric_col2, metric_col3, metric_col4, metric_col5 = st.columns(5)
+            metric_col1, metric_col2, metric_col3, metric_col4, metric_col5, metric_col6 = st.columns(6)
             
             with metric_col1:
                 total_contacts = len(df)
@@ -1570,14 +1609,19 @@ def main():
                 campaign_percent = (campaign_count / len(df)) * 100 if len(df) > 0 else 0
                 st.metric("With Campaign", f"{campaign_count:,} ({campaign_percent:.1f}%)")
             
+            with metric_col6:
+                drilldown2_count = df['Has Drilldown 2'].sum()
+                drilldown2_percent = (drilldown2_count / len(df)) * 100 if len(df) > 0 else 0
+                st.metric("With Drill-Down 2", f"{drilldown2_count:,} ({drilldown2_percent:.1f}%)")
+            
             st.divider()
             
-            # Create tabs for different sections - ADDED Campaign Performance tab
+            # Create tabs for different sections
             tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
                 "📈 Lead Status Distribution", 
                 "📚 Course Distribution",
                 "🎯 Course Quality Analysis",
-                "📣 Campaign Performance",  # NEW TAB
+                "📣 COMPLETE Campaign Performance",  # UPDATED NAME
                 "🔍 Analytics Dashboard", 
                 "🌍 Geographic Analysis", 
                 "📧 Email Validation",
@@ -1885,9 +1929,9 @@ def main():
                 else:
                     st.info("No course quality analysis available")
             
-            with tab4:  # 📣 NEW: CAMPAIGN PERFORMANCE ANALYSIS
-                st.markdown("### 📣 Campaign Performance (Traffic Source Drill-Down)")
-                st.markdown("*Pivot table showing campaign-wise lead status distribution with traffic source attribution*")
+            with tab4:  # 📣 COMPLETE CAMPAIGN PERFORMANCE ANALYSIS
+                st.markdown("### 📣 COMPLETE Campaign Performance (3-Level Hierarchy)")
+                st.markdown("*Full HubSpot hierarchy: Traffic Source → Campaign → Drill-Down 2 → Lead Status*")
                 
                 if st.session_state.analysis_results and 'campaign_performance' in st.session_state.analysis_results:
                     campaign_df = st.session_state.analysis_results['campaign_performance']
@@ -1898,7 +1942,7 @@ def main():
                         
                         with col_camp1:
                             total_campaigns = len(campaign_df)
-                            st.metric("Total Campaigns", total_campaigns)
+                            st.metric("Total Campaign Paths", total_campaigns)
                         
                         with col_camp2:
                             avg_quality = campaign_df['Quality Leads %'].mean()
@@ -1909,39 +1953,108 @@ def main():
                             st.metric("Total Campaign Leads", f"{total_leads:,}")
                         
                         with col_camp4:
-                            best_campaign = campaign_df.iloc[0]['Campaign Name'] if len(campaign_df) > 0 else "N/A"
-                            best_quality = campaign_df.iloc[0]['Quality Leads %'] if len(campaign_df) > 0 else 0
-                            st.metric("Best Campaign", best_campaign[:20], delta=f"{best_quality:.1f}%")
+                            drilldown2_count = campaign_df['Campaign Drilldown 2'].nunique()
+                            st.metric("Unique Drill-Down 2", drilldown2_count)
+                        
+                        # Show hierarchy visualization
+                        st.markdown("#### 🎯 HubSpot Analytics Hierarchy")
+                        st.markdown("""
+                        <div style="background-color: #f0f7ff; padding: 1rem; border-radius: 0.5rem; margin: 1rem 0;">
+                            <div class="hierarchy-level-1">📍 Level 1: hs_analytics_source (Traffic Source)</div>
+                            <div class="hierarchy-level-2">📋 Level 2: hs_analytics_source_data_1 (Campaign Name)</div>
+                            <div class="hierarchy-level-3">🎯 Level 3: hs_analytics_source_data_2 (Ad/Keyword/Placement)</div>
+                        </div>
+                        """, unsafe_allow_html=True)
                         
                         st.divider()
                         
-                        # 🔥 TRAFFIC SOURCE FILTER
-                        st.markdown("#### 🔍 Filter by Traffic Source")
-                        unique_sources = sorted(campaign_df['Traffic Source'].unique())
-                        selected_source = st.selectbox(
-                            "Select Traffic Source:",
-                            ["All Traffic Sources"] + list(unique_sources),
-                            key="traffic_source_filter"
-                        )
+                        # 🔥 COMPLETE FILTER SYSTEM
+                        st.markdown("#### 🔍 Filter by Hierarchy Level")
+                        col_filter1, col_filter2, col_filter3 = st.columns(3)
                         
-                        # Filter data based on selection
+                        with col_filter1:
+                            # Traffic Source Filter
+                            unique_sources = sorted(campaign_df['Traffic Source'].unique())
+                            selected_source = st.selectbox(
+                                "Traffic Source:",
+                                ["All Traffic Sources"] + list(unique_sources),
+                                key="traffic_source_filter"
+                            )
+                        
+                        with col_filter2:
+                            # Campaign Name Filter
+                            if selected_source != "All Traffic Sources":
+                                source_campaigns = sorted(campaign_df[campaign_df['Traffic Source'] == selected_source]['Campaign Name'].unique())
+                            else:
+                                source_campaigns = sorted(campaign_df['Campaign Name'].unique())
+                            
+                            selected_campaign = st.selectbox(
+                                "Campaign Name:",
+                                ["All Campaigns"] + list(source_campaigns),
+                                key="campaign_filter"
+                            )
+                        
+                        with col_filter3:
+                            # 🔥 Drill-Down 2 Filter
+                            if selected_source != "All Traffic Sources" and selected_campaign != "All Campaigns":
+                                source_campaign_dd2 = sorted(campaign_df[
+                                    (campaign_df['Traffic Source'] == selected_source) & 
+                                    (campaign_df['Campaign Name'] == selected_campaign)
+                                ]['Campaign Drilldown 2'].unique())
+                            elif selected_source != "All Traffic Sources":
+                                source_campaign_dd2 = sorted(campaign_df[campaign_df['Traffic Source'] == selected_source]['Campaign Drilldown 2'].unique())
+                            else:
+                                source_campaign_dd2 = sorted(campaign_df['Campaign Drilldown 2'].unique())
+                            
+                            selected_dd2 = st.selectbox(
+                                "Drill-Down 2:",
+                                ["All Drill-Down 2"] + list(source_campaign_dd2),
+                                key="drilldown2_filter"
+                            )
+                        
+                        # Apply filters
+                        filtered_df = campaign_df.copy()
+                        filter_messages = []
+                        
                         if selected_source != "All Traffic Sources":
-                            filtered_df = campaign_df[campaign_df['Traffic Source'] == selected_source].copy()
-                            st.success(f"Showing {len(filtered_df)} campaigns from {selected_source}")
-                        else:
-                            filtered_df = campaign_df.copy()
-                            st.info(f"Showing all {len(filtered_df)} campaigns across {len(unique_sources)} traffic sources")
+                            filtered_df = filtered_df[filtered_df['Traffic Source'] == selected_source]
+                            filter_messages.append(f"Traffic Source: {selected_source}")
                         
-                        # Show traffic source distribution badges
-                        st.markdown("**Traffic Source Distribution:**")
+                        if selected_campaign != "All Campaigns":
+                            filtered_df = filtered_df[filtered_df['Campaign Name'] == selected_campaign]
+                            filter_messages.append(f"Campaign: {selected_campaign}")
+                        
+                        if selected_dd2 != "All Drill-Down 2":
+                            filtered_df = filtered_df[filtered_df['Campaign Drilldown 2'] == selected_dd2]
+                            filter_messages.append(f"Drill-Down 2: {selected_dd2}")
+                        
+                        # Show filter summary
+                        if filter_messages:
+                            st.success(f"🔍 Filtered: {', '.join(filter_messages)} - Showing {len(filtered_df)} paths")
+                        else:
+                            st.info(f"Showing all {len(filtered_df)} campaign paths across {len(unique_sources)} traffic sources")
+                        
+                        # Show hierarchy badges
+                        st.markdown("**Hierarchy Distribution:**")
+                        
+                        # Traffic Source badges
                         source_counts = campaign_df['Traffic Source'].value_counts()
-                        for source, count in source_counts.head(10).items():
-                            st.markdown(f'<span class="traffic-badge">{source}: {count} campaigns</span>', unsafe_allow_html=True)
+                        for source, count in source_counts.head(8).items():
+                            st.markdown(f'<span class="traffic-badge">{source}: {count}</span>', unsafe_allow_html=True)
+                        
+                        # Drill-Down 2 badges (if applicable)
+                        if selected_source != "All Traffic Sources" and not filtered_df.empty:
+                            dd2_counts = filtered_df['Campaign Drilldown 2'].value_counts()
+                            if len(dd2_counts) > 0:
+                                st.markdown("**Drill-Down 2 Values:**")
+                                for dd2, count in dd2_counts.head(10).items():
+                                    if dd2:  # Skip empty
+                                        st.markdown(f'<span class="drilldown-badge">{dd2[:30]}: {count}</span>', unsafe_allow_html=True)
                         
                         st.divider()
                         
-                        # Display the main campaign performance table
-                        st.markdown("#### 📊 Campaign Performance Matrix")
+                        # Display the COMPLETE campaign performance table
+                        st.markdown("#### 📊 Complete Campaign Performance Matrix")
                         
                         # Create a copy for display with formatting
                         display_campaign_df = filtered_df.copy()
@@ -1971,6 +2084,7 @@ def main():
                             column_config={
                                 "Traffic Source": st.column_config.TextColumn("Traffic Source", width="medium"),
                                 "Campaign Name": st.column_config.TextColumn("Campaign Name", width="large"),
+                                "Campaign Drilldown 2": st.column_config.TextColumn("Drill-Down 2", width="medium"),
                                 "Quality Leads %": st.column_config.TextColumn("Quality %", width="small"),
                                 "Grand Total": st.column_config.TextColumn("Total", width="small")
                             }
@@ -1985,6 +2099,7 @@ def main():
                                 <li><strong>Disqualified Leads</strong> = Not Interested + Not Qualified</li>
                                 <li><strong>Quality Leads %</strong> = Percentage of high-quality leads</li>
                                 <li><strong>Disqualified %</strong> = Percentage of disqualified leads</li>
+                                <li><strong>Drill-Down 2</strong> = Ad name, Keyword, Placement, or specific element</li>
                             </ul>
                             <p style="margin-top: 0.5rem; margin-bottom: 0; font-size: 0.9rem;">
                                 <span class="campaign-good">✅ High Quality % (>50%) indicates effective campaigns</span><br>
@@ -2000,9 +2115,9 @@ def main():
                         with col_camp_dl1:
                             csv_campaign = filtered_df.to_csv(index=False)
                             st.download_button(
-                                "📥 Download Campaign Data",
+                                "📥 Download COMPLETE Campaign Data",
                                 csv_campaign,
-                                f"campaign_performance_{datetime.now().strftime('%Y%m%d')}.csv",
+                                f"complete_campaign_performance_{datetime.now().strftime('%Y%m%d')}.csv",
                                 "text/csv",
                                 use_container_width=True
                             )
@@ -2013,37 +2128,43 @@ def main():
                                 st.dataframe(filtered_df, use_container_width=True, height=400)
                         
                         with col_camp_dl3:
-                            # Show top 5 campaigns by quality
-                            if st.button("🏆 Show Top 5 Campaigns", use_container_width=True, key="top5_campaigns"):
-                                top_campaigns = filtered_df.sort_values('Quality Leads %', ascending=False).head(5)
+                            # Show top 5 paths by quality
+                            if st.button("🏆 Show Top 5 Performing Paths", use_container_width=True, key="top5_paths"):
+                                top_paths = filtered_df.sort_values('Quality Leads %', ascending=False).head(5)
                                 st.dataframe(
-                                    top_campaigns[['Traffic Source', 'Campaign Name', 'Quality Leads %', 'Disqualified %', 'Grand Total']], 
+                                    top_paths[['Traffic Source', 'Campaign Name', 'Campaign Drilldown 2', 'Quality Leads %', 'Disqualified %', 'Grand Total']], 
                                     use_container_width=True
                                 )
                         
                         # Additional insights
                         with st.expander("📈 Campaign Insights", expanded=False):
-                            # Find best and worst campaigns
+                            # Find best and worst paths
                             if not filtered_df.empty:
-                                best_campaign_row = filtered_df.loc[filtered_df['Quality Leads %'].idxmax()]
-                                worst_campaign_row = filtered_df.loc[filtered_df['Disqualified %'].idxmax()]
+                                best_path = filtered_df.loc[filtered_df['Quality Leads %'].idxmax()]
+                                worst_path = filtered_df.loc[filtered_df['Disqualified %'].idxmax()]
                                 
                                 col_ins1, col_ins2 = st.columns(2)
                                 
                                 with col_ins1:
-                                    st.markdown("**🏆 Best Performing Campaign**")
+                                    st.markdown("**🏆 Best Performing Path**")
+                                    path_label = f"{best_path['Traffic Source']} → {best_path['Campaign Name'][:20]}"
+                                    if best_path['Campaign Drilldown 2']:
+                                        path_label += f" → {best_path['Campaign Drilldown 2'][:20]}"
                                     st.metric(
-                                        label=f"{best_campaign_row['Traffic Source']} - {best_campaign_row['Campaign Name'][:30]}",
-                                        value=f"{best_campaign_row['Quality Leads %']:.1f}% Quality",
-                                        delta=f"{best_campaign_row['Grand Total']} total leads"
+                                        label=path_label,
+                                        value=f"{best_path['Quality Leads %']:.1f}% Quality",
+                                        delta=f"{best_path['Grand Total']} total leads"
                                     )
                                 
                                 with col_ins2:
-                                    st.markdown("**⚠️ Worst Performing Campaign**")
+                                    st.markdown("**⚠️ Worst Performing Path**")
+                                    path_label = f"{worst_path['Traffic Source']} → {worst_path['Campaign Name'][:20]}"
+                                    if worst_path['Campaign Drilldown 2']:
+                                        path_label += f" → {worst_path['Campaign Drilldown 2'][:20]}"
                                     st.metric(
-                                        label=f"{worst_campaign_row['Traffic Source']} - {worst_campaign_row['Campaign Name'][:30]}",
-                                        value=f"{worst_campaign_row['Disqualified %']:.1f}% Disqualified",
-                                        delta=f"{worst_campaign_row['Grand Total']} total leads"
+                                        label=path_label,
+                                        value=f"{worst_path['Disqualified %']:.1f}% Disqualified",
+                                        delta=f"{worst_path['Grand Total']} total leads"
                                     )
                                 
                                 # Traffic source performance
@@ -2056,69 +2177,104 @@ def main():
                                 
                                 st.dataframe(source_performance, use_container_width=True)
                                 
-                                # Campaign size distribution
-                                st.markdown("**📈 Campaign Size Distribution**")
-                                small_campaigns = (filtered_df['Grand Total'] < 10).sum()
-                                medium_campaigns = ((filtered_df['Grand Total'] >= 10) & (filtered_df['Grand Total'] < 50)).sum()
-                                large_campaigns = (filtered_df['Grand Total'] >= 50).sum()
-                                
-                                size_dist = pd.DataFrame({
-                                    'Campaign Size': ['Small (<10)', 'Medium (10-49)', 'Large (50+)'],
-                                    'Number of Campaigns': [small_campaigns, medium_campaigns, large_campaigns]
-                                })
-                                st.dataframe(size_dist, use_container_width=True)
+                                # Drill-Down 2 analysis (if available)
+                                dd2_with_data = filtered_df[filtered_df['Campaign Drilldown 2'] != '']
+                                if not dd2_with_data.empty:
+                                    st.markdown("**🎯 Drill-Down 2 Performance**")
+                                    dd2_performance = dd2_with_data.groupby('Campaign Drilldown 2').agg({
+                                        'Grand Total': 'sum',
+                                        'Quality Leads %': 'mean',
+                                        'Disqualified %': 'mean'
+                                    }).round(1).sort_values('Quality Leads %', ascending=False).head(10)
+                                    
+                                    st.dataframe(dd2_performance, use_container_width=True)
                             
-                        # 🔥 CAMPAIGN DETAIL DRILL-DOWN
-                        with st.expander("🔍 Drill Down to Specific Campaign", expanded=False):
-                            # Select campaign for drill-down
-                            campaign_options = filtered_df['Campaign Name'].unique()
-                            selected_campaign = st.selectbox(
-                                "Select Campaign for Detailed Analysis:",
-                                campaign_options,
-                                key="campaign_drilldown"
-                            )
-                            
-                            if selected_campaign:
-                                campaign_data = df[df['Campaign Name'] == selected_campaign].copy()
+                        # 🔥 DEEP DRILL-DOWN TO SPECIFIC PATH
+                        with st.expander("🔍 Deep Drill-Down to Specific Path", expanded=False):
+                            if not filtered_df.empty:
+                                # Create path identifiers for selection
+                                filtered_df['Path_Identifier'] = filtered_df.apply(
+                                    lambda row: f"{row['Traffic Source']} → {row['Campaign Name']}" + 
+                                    (f" → {row['Campaign Drilldown 2']}" if row['Campaign Drilldown 2'] else ""),
+                                    axis=1
+                                )
                                 
-                                if not campaign_data.empty:
-                                    # Campaign overview
-                                    col_cd1, col_cd2, col_cd3 = st.columns(3)
+                                path_options = filtered_df['Path_Identifier'].unique()
+                                selected_path = st.selectbox(
+                                    "Select Specific Path for Deep Analysis:",
+                                    path_options,
+                                    key="path_deep_drilldown"
+                                )
+                                
+                                if selected_path:
+                                    # Find the selected row
+                                    selected_row = filtered_df[filtered_df['Path_Identifier'] == selected_path].iloc[0]
                                     
-                                    with col_cd1:
-                                        campaign_leads = len(campaign_data)
-                                        st.metric("Total Leads", campaign_leads)
+                                    # Get all contacts for this specific path
+                                    path_contacts = df[
+                                        (df['Traffic Source'] == selected_row['Traffic Source']) &
+                                        (df['Campaign Name'] == selected_row['Campaign Name']) &
+                                        (df['Campaign Drilldown 2'] == selected_row['Campaign Drilldown 2'])
+                                    ].copy()
                                     
-                                    with col_cd2:
-                                        traffic_source = campaign_data['Traffic Source'].iloc[0]
-                                        st.metric("Traffic Source", traffic_source)
-                                    
-                                    with col_cd3:
-                                        quality_leads = campaign_data[campaign_data['Lead Status'].isin(['Hot', 'Warm', 'Customer'])].shape[0]
-                                        quality_pct = (quality_leads / campaign_leads * 100) if campaign_leads > 0 else 0
-                                        st.metric("Quality Leads", quality_leads, delta=f"{quality_pct:.1f}%")
-                                    
-                                    # Lead status breakdown for this campaign
-                                    st.markdown("**Lead Status Breakdown**")
-                                    campaign_status = campaign_data['Lead Status'].value_counts().reset_index()
-                                    campaign_status.columns = ['Lead Status', 'Count']
-                                    campaign_status['Percentage'] = (campaign_status['Count'] / campaign_status['Count'].sum() * 100).round(1)
-                                    st.dataframe(campaign_status, use_container_width=True)
-                                    
-                                    # Course distribution for this campaign
-                                    if campaign_data['Course/Program'].notna().any():
-                                        st.markdown("**Course Distribution**")
-                                        campaign_courses = campaign_data['Course/Program'].value_counts().reset_index()
-                                        campaign_courses.columns = ['Course/Program', 'Count']
-                                        st.dataframe(campaign_courses.head(10), use_container_width=True)
+                                    if not path_contacts.empty:
+                                        # Path overview
+                                        col_pd1, col_pd2, col_pd3, col_pd4 = st.columns(4)
+                                        
+                                        with col_pd1:
+                                            path_leads = len(path_contacts)
+                                            st.metric("Total Leads", path_leads)
+                                        
+                                        with col_pd2:
+                                            quality_leads = path_contacts[path_contacts['Lead Status'].isin(['Hot', 'Warm', 'Customer'])].shape[0]
+                                            quality_pct = (quality_leads / path_leads * 100) if path_leads > 0 else 0
+                                            st.metric("Quality Leads", quality_leads, delta=f"{quality_pct:.1f}%")
+                                        
+                                        with col_pd3:
+                                            drilldown_value = selected_row['Campaign Drilldown 2'] if selected_row['Campaign Drilldown 2'] else "Not Set"
+                                            st.metric("Drill-Down 2", drilldown_value[:20])
+                                        
+                                        with col_pd4:
+                                            avg_creation = path_contacts['Created Date'].mean().strftime('%Y-%m-%d') if not path_contacts['Created Date'].isna().all() else "N/A"
+                                            st.metric("Avg Creation Date", avg_creation)
+                                        
+                                        # Lead status breakdown for this path
+                                        st.markdown("**Lead Status Breakdown**")
+                                        path_status = path_contacts['Lead Status'].value_counts().reset_index()
+                                        path_status.columns = ['Lead Status', 'Count']
+                                        path_status['Percentage'] = (path_status['Count'] / path_status['Count'].sum() * 100).round(1)
+                                        st.dataframe(path_status, use_container_width=True)
+                                        
+                                        # Course distribution for this path
+                                        if path_contacts['Course/Program'].notna().any():
+                                            st.markdown("**Course Distribution**")
+                                            path_courses = path_contacts['Course/Program'].value_counts().reset_index()
+                                            path_courses.columns = ['Course/Program', 'Count']
+                                            st.dataframe(path_courses.head(10), use_container_width=True)
+                                        
+                                        # Export this specific path
+                                        csv_path = path_contacts.to_csv(index=False)
+                                        st.download_button(
+                                            "📥 Download This Path's Contacts",
+                                            csv_path,
+                                            f"path_contacts_{selected_path[:50]}_{datetime.now().strftime('%Y%m%d')}.csv",
+                                            "text/csv",
+                                            use_container_width=True
+                                        )
                                         
                     else:
                         st.info("No campaign performance data available (no contacts with campaign information)")
                         
                         # Show how many contacts have campaign info
                         campaign_count = df['Has Campaign'].sum()
+                        drilldown2_count = df['Has Drilldown 2'].sum()
+                        
                         if campaign_count > 0:
                             st.info(f"Found {campaign_count} contacts with campaign information")
+                            if drilldown2_count > 0:
+                                st.success(f"Found {drilldown2_count} contacts with Drill-Down 2 information ({drilldown2_count/campaign_count*100:.1f}% of campaigns)")
+                            else:
+                                st.warning("No Drill-Down 2 information found (hs_analytics_source_data_2 is empty)")
                         else:
                             st.warning("No campaign/traffic source information found in the contacts data")
                 else:
@@ -2319,9 +2475,9 @@ def main():
                         if 'campaign_performance' in st.session_state.analysis_results:
                             csv = st.session_state.analysis_results['campaign_performance'].to_csv(index=False)
                             st.download_button(
-                                "📣 Campaign Performance",
+                                "📣 Complete Campaign Data",
                                 csv,
-                                "campaign_performance.csv",
+                                "complete_campaign_performance.csv",
                                 "text/csv",
                                 use_container_width=True
                             )
@@ -2345,8 +2501,8 @@ def main():
                 <strong>HubSpot Contacts Analytics Dashboard</strong> • Built with Streamlit • 
                 Data last fetched: {datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S")} IST • 
                 <span style='color: #00a86b; font-weight: bold;'>✅ LEAD STATUS NORMALIZATION ACTIVE</span> • 
-                <span style='color: #1a73e8; font-weight: bold;'>🎯 CAMPAIGN PERFORMANCE ENABLED</span> • 
-                <span style='color: #ff6b35; font-weight: bold;'>📣 TRAFFIC SOURCE DRILL-DOWN</span>
+                <span style='color: #1a73e8; font-weight: bold;'>📣 3-LEVEL HIERARCHY ENABLED</span> • 
+                <span style='color: #ff6b35; font-weight: bold;'>🎯 DRILL-DOWN 2: hs_analytics_source_data_2</span>
                 </div>
                 """,
                 unsafe_allow_html=True
@@ -2362,22 +2518,24 @@ def main():
                         Configure date filters and click "Fetch ALL Contacts" to start analysis
                     </p>
                     <div style='margin-top: 2rem;'>
-                        <p>🎯 <strong>Key Features (ENHANCED):</strong></p>
+                        <p>🎯 <strong>Key Features (COMPLETE HIERARCHY):</strong></p>
                         <ul style='text-align: left; margin-left: 30%;'>
                             <li>✅ <strong>Course Quality Analysis</strong> - Pivot Table</li>
                             <li>✅ <strong>Correct Lead Status Counts</strong> - Old values merged</li>
                             <li>✅ <strong>Course Distribution</strong> with counts</li>
                             <li>✅ <strong>UNLIMITED fetching</strong> - Gets ALL records</li>
-                            <li>🔥 <strong>NEW: Campaign Performance Analysis</strong> - Traffic Source Drill-Down</li>
-                            <li>🔥 <strong>NEW: Traffic Source Attribution</strong> - hs_analytics_source & hs_analytics_source_data_1</li>
+                            <li>🔥 <strong>COMPLETE: Campaign Performance Analysis</strong> - 3-Level Hierarchy</li>
+                            <li>🔥 <strong>Level 1:</strong> hs_analytics_source (Traffic Source)</li>
+                            <li>🔥 <strong>Level 2:</strong> hs_analytics_source_data_1 (Campaign Name)</li>
+                            <li>🔥 <strong>Level 3:</strong> hs_analytics_source_data_2 (Ad/Keyword/Placement)</li>
                         </ul>
-                        <p style='margin-top: 2rem;'>📊 <strong>New Campaign Performance Analysis Includes:</strong></p>
+                        <p style='margin-top: 2rem;'>📊 <strong>Complete Campaign Performance Includes:</strong></p>
                         <ul style='text-align: left; margin-left: 30%;'>
-                            <li>📣 <strong>Pivot Table</strong> - Campaign × Lead Status matrix</li>
-                            <li>🔍 <strong>Traffic Source Filter</strong> - Google, Facebook, Email, etc.</li>
+                            <li>📣 <strong>3-Level Pivot Table</strong> - Full HubSpot hierarchy</li>
+                            <li>🔍 <strong>Cascading Filters</strong> - Source → Campaign → Drill-Down 2</li>
                             <li>🎯 <strong>Quality Metrics</strong> - Hot+Warm+Customer vs Disqualified</li>
-                            <li>📈 <strong>Drill-Down Analysis</strong> - Campaign-specific lead breakdown</li>
-                            <li>📥 <strong>Export Ready</strong> - Download complete analysis</li>
+                            <li>🔬 <strong>Deep Drill-Down</strong> - Path-specific lead analysis</li>
+                            <li>📥 <strong>Export Ready</strong> - Download complete hierarchy data</li>
                         </ul>
                     </div>
                 </div>
