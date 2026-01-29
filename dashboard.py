@@ -107,6 +107,23 @@ st.markdown("""
         color: #155724 !important;
         font-weight: bold;
     }
+    .campaign-good {
+        background-color: #d4edda !important;
+        color: #155724 !important;
+    }
+    .campaign-bad {
+        background-color: #f8d7da !important;
+        color: #721c24 !important;
+    }
+    .traffic-badge {
+        background-color: #e3f2fd;
+        color: #1565c0;
+        padding: 0.2rem 0.6rem;
+        border-radius: 0.8rem;
+        font-size: 0.8rem;
+        display: inline-block;
+        margin: 0.1rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -158,6 +175,10 @@ LEAD_STATUS_MAP = {
     "customer": "Customer",
     "duplicate": "Duplicate",
     "junk": "Duplicate",
+    
+    # 🎯 ADDITIONAL STATUSES
+    "upselling": "Upselling",
+    "course_shifting": "Course Shifting",
     
     # 🎯 CATCH ALL UNKNOWN
     "": "Unknown",
@@ -217,6 +238,49 @@ PROSPECT_REASON_MAP = {
     # Fallback: Clean up any remaining values
     "": "",
     None: ""
+}
+
+# 🔥 TRAFFIC SOURCE CATEGORIZATION
+TRAFFIC_SOURCE_CATEGORIES = {
+    # Search Engines
+    "google": "Google",
+    "bing": "Bing",
+    "yahoo": "Yahoo",
+    "duckduckgo": "DuckDuckGo",
+    "baidu": "Baidu",
+    
+    # Social Media
+    "facebook": "Facebook",
+    "instagram": "Instagram",
+    "linkedin": "LinkedIn",
+    "twitter": "Twitter",
+    "x.com": "Twitter",
+    "tiktok": "TikTok",
+    "pinterest": "Pinterest",
+    "youtube": "YouTube",
+    
+    # Email
+    "email": "Email",
+    "mail": "Email",
+    "newsletter": "Email",
+    
+    # Direct/Referral
+    "direct": "Direct Traffic",
+    "referral": "Referral",
+    
+    # Organic/Social
+    "organic": "Organic Search",
+    "social": "Social Media",
+    
+    # Paid
+    "ppc": "Paid Search",
+    "cpc": "Paid Search",
+    "display": "Display Ads",
+    
+    # Others
+    "blog": "Blog",
+    "whatsapp": "WhatsApp",
+    "sms": "SMS"
 }
 
 # SECRET API KEY - LOADED FROM SECRETS
@@ -370,10 +434,15 @@ def fetch_hubspot_contacts_with_date_filter(api_key, date_field, start_date, end
     status_text = st.empty()
     status_text.text(f"📡 Fetching ALL contacts with {date_field} filter from {start_date} to {end_date}...")
     
-    # IMPORTANT: Define ALL properties including course/program related
+    # 🔥 IMPORTANT: Added Campaign/Traffic Source properties
     all_properties = [
         # Lead status and basic info
         "hs_lead_status", "lifecyclestage", "hubspot_owner_id",
+        
+        # 🔥 CAMPAIGN & TRAFFIC SOURCE PROPERTIES (NEW)
+        "hs_analytics_source", "hs_analytics_source_data_1",
+        "hs_campaign_name", "hs_utm_source", "hs_utm_medium",
+        "hs_utm_campaign", "hs_utm_content", "hs_utm_term",
         
         # Prospect reason properties
         "future_prospect_reasons", "hot_prospect_reason", 
@@ -525,12 +594,57 @@ def normalize_lead_status(raw_status):
     if "new" in status or "open" in status or "fresh" in status:
         return "New Lead"
     
+    # Handle upselling and course shifting
+    if "upselling" in status:
+        return "Upselling"
+    if "course_shifting" in status or "shifting" in status:
+        return "Course Shifting"
+    
     # Direct mapping
     if status in LEAD_STATUS_MAP:
         return LEAD_STATUS_MAP[status]
     
     # Final fallback with title case
     return status.replace("_", " ").title()
+
+def normalize_traffic_source(raw_source):
+    """Normalize traffic source to standard categories"""
+    if not raw_source:
+        return "Unknown"
+    
+    source_str = str(raw_source).lower().strip()
+    
+    # Check for exact matches in categories
+    for key, category in TRAFFIC_SOURCE_CATEGORIES.items():
+        if key in source_str:
+            return category
+    
+    # Check for partial matches
+    if "google" in source_str:
+        return "Google"
+    elif "facebook" in source_str or "fb" in source_str:
+        return "Facebook"
+    elif "linkedin" in source_str:
+        return "LinkedIn"
+    elif "instagram" in source_str or "ig" in source_str:
+        return "Instagram"
+    elif "twitter" in source_str or "x.com" in source_str:
+        return "Twitter"
+    elif "email" in source_str or "mail" in source_str:
+        return "Email"
+    elif "direct" in source_str:
+        return "Direct Traffic"
+    elif "organic" in source_str:
+        return "Organic Search"
+    elif "referral" in source_str:
+        return "Referral"
+    elif "search" in source_str:
+        return "Search"
+    elif "social" in source_str:
+        return "Social Media"
+    
+    # Return cleaned version
+    return source_str.title()
 
 def map_prospect_reason(reason):
     """Map prospect reason with aggressive cleaning"""
@@ -614,6 +728,13 @@ def process_contacts_data(contacts):
         raw_lead_status = properties.get("hs_lead_status", "") or properties.get("lead_status", "")
         display_lead_status = normalize_lead_status(raw_lead_status)
         
+        # 🔥 NEW: Extract Campaign & Traffic Source data
+        traffic_source = properties.get("hs_analytics_source", "")
+        campaign_name = properties.get("hs_analytics_source_data_1", "") or properties.get("hs_campaign_name", "")
+        
+        # Normalize traffic source
+        normalized_traffic_source = normalize_traffic_source(traffic_source)
+        
         # Process each contact
         processed_data.append({
             "ID": contact.get("id", ""),
@@ -632,6 +753,14 @@ def process_contacts_data(contacts):
             # 🔥 NORMALIZED LEAD STATUS (CORRECT!)
             "Lead Status": display_lead_status,
             "Lifecycle Stage": properties.get("lifecyclestage", ""),
+            
+            # 🔥 NEW: CAMPAIGN & TRAFFIC SOURCE DATA
+            "Traffic Source": normalized_traffic_source,
+            "Traffic Source Raw": traffic_source,
+            "Campaign Name": campaign_name,
+            "UTM Source": properties.get("hs_utm_source", ""),
+            "UTM Medium": properties.get("hs_utm_medium", ""),
+            "UTM Campaign": properties.get("hs_utm_campaign", ""),
             
             # 🔥 NORMALIZED PROSPECT REASONS (CORRECT!)
             "Future Prospect Reasons": map_prospect_reason(properties.get("future_prospect_reasons", "") or properties.get("future_prospect_reason", "")),
@@ -663,6 +792,8 @@ def process_contacts_data(contacts):
             "Has Email": 1 if properties.get("email") else 0,
             "Has Phone": 1 if properties.get("phone") else 0,
             "Has Course": 1 if course_info else 0,
+            "Has Traffic Source": 1 if traffic_source else 0,
+            "Has Campaign": 1 if campaign_name else 0,
             
             # 🔥 STORE RAW VALUE FOR DEBUGGING
             "Lead Status Raw": raw_lead_status
@@ -713,7 +844,9 @@ def build_course_quality_table(df):
         'Hot', 
         'Future Prospect',
         'Customer',
-        'New Lead'
+        'New Lead',
+        'Upselling',
+        'Course Shifting'
     ]
     
     # Add missing columns with 0 values
@@ -738,6 +871,87 @@ def build_course_quality_table(df):
     
     # Sort by Grand Total descending
     pivot = pivot.sort_values('Grand Total', ascending=False)
+    
+    return pivot
+
+def build_campaign_performance_table(df):
+    """
+    🎯 BUILD CAMPAIGN PERFORMANCE TABLE (PIVOT STYLE)
+    Creates a matrix showing Campaign-wise lead status distribution
+    """
+    # Keep only records with campaign info
+    df_with_campaign = df[
+        (df['Campaign Name'].notna()) & 
+        (df['Campaign Name'] != '') & 
+        (df['Traffic Source'].notna()) & 
+        (df['Traffic Source'] != 'Unknown')
+    ].copy()
+    
+    if df_with_campaign.empty:
+        return pd.DataFrame()
+    
+    # Clean campaign names
+    df_with_campaign['Campaign_Clean'] = df_with_campaign['Campaign Name'].str.strip()
+    df_with_campaign['Traffic_Source_Clean'] = df_with_campaign['Traffic Source'].str.strip()
+    
+    # Create pivot table: Campaign × Lead Status
+    pivot = pd.pivot_table(
+        df_with_campaign,
+        index=['Traffic_Source_Clean', 'Campaign_Clean'],
+        columns='Lead Status',
+        values='ID',
+        aggfunc='count',
+        fill_value=0
+    )
+    
+    # Reset index to make Campaign a column
+    pivot = pivot.reset_index()
+    
+    # Rename columns for consistency
+    pivot = pivot.rename(columns={
+        'Traffic_Source_Clean': 'Traffic Source',
+        'Campaign_Clean': 'Campaign Name'
+    })
+    
+    # Define required columns in specific order (matching your requirement)
+    required_columns = [
+        'Traffic Source',
+        'Campaign Name',
+        'Cold',
+        'Warm',
+        'Hot',
+        'New Lead',
+        'Customer',
+        'Not Connected (NC)',
+        'Not Interested',
+        'Not Qualified',
+        'Duplicate',
+        'Upselling',
+        'Course Shifting'
+    ]
+    
+    # Add missing columns with 0 values
+    for col in required_columns:
+        if col not in pivot.columns:
+            pivot[col] = 0
+    
+    # Reorder columns
+    pivot = pivot[required_columns]
+    
+    # Calculate Grand Total (sum of all lead status columns)
+    status_columns = [col for col in required_columns if col not in ['Traffic Source', 'Campaign Name']]
+    pivot['Grand Total'] = pivot[status_columns].sum(axis=1)
+    
+    # Calculate Quality Metrics
+    pivot['Quality Leads (Hot+Warm+Customer)'] = pivot['Hot'] + pivot['Warm'] + pivot['Customer']
+    pivot['Disqualified Leads'] = pivot['Not Interested'] + pivot['Not Qualified']
+    
+    # Calculate percentages
+    pivot['Quality Leads %'] = (pivot['Quality Leads (Hot+Warm+Customer)'] / pivot['Grand Total'] * 100).round(1)
+    pivot['Disqualified %'] = (pivot['Disqualified Leads'] / pivot['Grand Total'] * 100).round(1)
+    
+    # Sort by Quality Leads % descending
+    pivot = pivot.sort_values(['Quality Leads %', 'Grand Total'], ascending=[False, False])
     
     return pivot
 
@@ -782,6 +996,30 @@ def analyze_course_distribution(df):
     course_dist = course_dist.sort_values('Count', ascending=False)
     
     return course_dist
+
+def analyze_traffic_source_distribution(df):
+    """Analyze traffic source distribution."""
+    if 'Traffic Source' not in df.columns:
+        return pd.DataFrame()
+    
+    # Remove unknown/empty traffic sources
+    df_filtered = df[
+        (df['Traffic Source'].notna()) & 
+        (df['Traffic Source'] != '') & 
+        (df['Traffic Source'] != 'Unknown')
+    ].copy()
+    
+    if df_filtered.empty:
+        return pd.DataFrame()
+    
+    # Count distribution
+    traffic_dist = df_filtered['Traffic Source'].value_counts().reset_index()
+    traffic_dist.columns = ['Traffic Source', 'Count']
+    
+    # Sort by count (descending)
+    traffic_dist = traffic_dist.sort_values('Count', ascending=False)
+    
+    return traffic_dist
 
 def analyze_prospect_reasons(df):
     """Analyze all prospect reasons - with CORRECT mapping."""
@@ -840,30 +1078,35 @@ def analyze_contact_data(df):
     if not course_dist.empty:
         analysis['course_distribution'] = course_dist
     
-    # 3. Prospect Reasons Analysis
+    # 3. Traffic Source Distribution
+    traffic_dist = analyze_traffic_source_distribution(df)
+    if not traffic_dist.empty:
+        analysis['traffic_source_distribution'] = traffic_dist
+    
+    # 4. Prospect Reasons Analysis
     prospect_reasons = analyze_prospect_reasons(df)
     if prospect_reasons:
         analysis['prospect_reasons'] = prospect_reasons
     
-    # 4. Country Analysis
+    # 5. Country Analysis
     if 'Country' in df.columns:
         country_dist = df['Country'].value_counts().reset_index()
         country_dist.columns = ['Country', 'Count']
         analysis['country_distribution'] = country_dist
     
-    # 5. Industry Analysis
+    # 6. Industry Analysis
     if 'Industry' in df.columns:
         industry_dist = df['Industry'].value_counts().reset_index()
         industry_dist.columns = ['Industry', 'Count']
         analysis['industry_distribution'] = industry_dist
     
-    # 6. Lifecycle Stage Analysis
+    # 7. Lifecycle Stage Analysis
     if 'Lifecycle Stage' in df.columns:
         stage_dist = df['Lifecycle Stage'].value_counts().reset_index()
         stage_dist.columns = ['Lifecycle Stage', 'Count']
         analysis['stage_distribution'] = stage_dist
     
-    # 7. Creation Date Trend (Monthly)
+    # 8. Creation Date Trend (Monthly)
     if 'Created Date' in df.columns:
         try:
             df['Created_Month'] = df['Created Date'].dt.to_period('M')
@@ -874,39 +1117,44 @@ def analyze_contact_data(df):
         except:
             pass
     
-    # 8. Contact Completeness Analysis
+    # 9. Contact Completeness Analysis
     completeness_data = {
-        'Field': ['Email', 'Phone', 'Lead Status', 'Course/Program', 'Country', 'Industry'],
+        'Field': ['Email', 'Phone', 'Lead Status', 'Course/Program', 'Traffic Source', 'Campaign Name'],
         'Count': [
             df['Email'].notna().sum(),
             df['Phone'].notna().sum(),
             df['Lead Status'].notna().sum(),
             df['Has Course'].sum(),
-            df['Country'].notna().sum(),
-            df['Industry'].notna().sum()
+            df['Has Traffic Source'].sum(),
+            df['Has Campaign'].sum()
         ],
         'Percentage': [
             (df['Email'].notna().sum() / len(df)) * 100,
             (df['Phone'].notna().sum() / len(df)) * 100,
             (df['Lead Status'].notna().sum() / len(df)) * 100,
             (df['Has Course'].sum() / len(df)) * 100,
-            (df['Country'].notna().sum() / len(df)) * 100,
-            (df['Industry'].notna().sum() / len(df)) * 100
+            (df['Has Traffic Source'].sum() / len(df)) * 100,
+            (df['Has Campaign'].sum() / len(df)) * 100
         ]
     }
     analysis['completeness'] = pd.DataFrame(completeness_data)
     
-    # 9. Phone Number Country Analysis
+    # 10. Phone Number Country Analysis
     if 'Phone' in df.columns:
         phone_analysis = analyze_phone_numbers(df)
         analysis['phone_country_analysis'] = phone_analysis
     
-    # 10. 🔥 NEW: Course Quality Analysis
+    # 11. 🔥 NEW: Course Quality Analysis
     course_quality = build_course_quality_table(df)
     if not course_quality.empty:
         analysis['course_quality'] = course_quality
     
-    # 11. DEBUG: Raw vs Normalized mapping
+    # 12. 🔥 NEW: Campaign Performance Analysis
+    campaign_performance = build_campaign_performance_table(df)
+    if not campaign_performance.empty:
+        analysis['campaign_performance'] = campaign_performance
+    
+    # 13. DEBUG: Raw vs Normalized mapping
     if 'Lead Status Raw' in df.columns:
         debug_data = df[['Lead Status', 'Lead Status Raw']].copy()
         debug_data = debug_data.groupby(['Lead Status', 'Lead Status Raw']).size().reset_index(name='Count')
@@ -1044,11 +1292,26 @@ def create_visualizations(analysis, df):
             fig2.update_layout(xaxis_tickangle=-45)
             visualizations['course_bar'] = fig2
     
-    # 3. Country Bar Chart (Top 15)
+    # 3. Traffic Source Bar Chart (Top 10)
+    if 'traffic_source_distribution' in analysis:
+        traffic_data = analysis['traffic_source_distribution'].head(10)
+        if not traffic_data.empty:
+            fig3 = px.bar(
+                traffic_data,
+                x='Traffic Source',
+                y='Count',
+                title='Top 10 Traffic Sources',
+                color='Count',
+                color_continuous_scale='Reds'
+            )
+            fig3.update_layout(xaxis_tickangle=-45)
+            visualizations['traffic_source_bar'] = fig3
+    
+    # 4. Country Bar Chart (Top 15)
     if 'country_distribution' in analysis:
         country_data = analysis['country_distribution'].head(15)
         if not country_data.empty:
-            fig3 = px.bar(
+            fig4 = px.bar(
                 country_data,
                 x='Country',
                 y='Count',
@@ -1056,30 +1319,30 @@ def create_visualizations(analysis, df):
                 color='Count',
                 color_continuous_scale='Greens'
             )
-            fig3.update_layout(xaxis_tickangle=-45)
-            visualizations['country_bar'] = fig3
+            fig4.update_layout(xaxis_tickangle=-45)
+            visualizations['country_bar'] = fig4
     
-    # 4. Monthly Trend Line Chart
+    # 5. Monthly Trend Line Chart
     if 'monthly_trend' in analysis:
         trend_data = analysis['monthly_trend']
         if len(trend_data) > 1:
-            fig4 = px.line(
+            fig5 = px.line(
                 trend_data,
                 x='Month',
                 y='Count',
                 title='Monthly Contact Creation Trend',
                 markers=True
             )
-            fig4.update_traces(line=dict(width=3))
-            visualizations['monthly_trend'] = fig4
+            fig5.update_traces(line=dict(width=3))
+            visualizations['monthly_trend'] = fig5
     
-    # 5. Lead Status Pie Chart
+    # 6. Lead Status Pie Chart
     if 'lead_status_distribution' in analysis:
         lead_status_data = analysis['lead_status_distribution']
         # Exclude "Grand Total" from pie chart
         lead_status_pie_data = lead_status_data[lead_status_data['Lead Status'] != 'Grand Total'].head(8)
         if not lead_status_pie_data.empty:
-            fig5 = px.pie(
+            fig6 = px.pie(
                 lead_status_pie_data,
                 values='Count',
                 names='Lead Status',
@@ -1087,14 +1350,14 @@ def create_visualizations(analysis, df):
                 hole=0.3,
                 color_discrete_sequence=px.colors.qualitative.Set3
             )
-            fig5.update_traces(textposition='inside', textinfo='percent+label')
-            visualizations['lead_status_pie'] = fig5
+            fig6.update_traces(textposition='inside', textinfo='percent+label')
+            visualizations['lead_status_pie'] = fig6
     
-    # 6. Course Pie Chart
+    # 7. Course Pie Chart
     if 'course_distribution' in analysis:
         course_data = analysis['course_distribution'].head(8)
         if not course_data.empty:
-            fig6 = px.pie(
+            fig7 = px.pie(
                 course_data,
                 values='Count',
                 names='Course',
@@ -1102,8 +1365,23 @@ def create_visualizations(analysis, df):
                 hole=0.4,
                 color_discrete_sequence=px.colors.qualitative.Pastel
             )
-            fig6.update_traces(textposition='inside', textinfo='percent+label')
-            visualizations['course_pie'] = fig6
+            fig7.update_traces(textposition='inside', textinfo='percent+label')
+            visualizations['course_pie'] = fig7
+    
+    # 8. Traffic Source Pie Chart
+    if 'traffic_source_distribution' in analysis:
+        traffic_data = analysis['traffic_source_distribution'].head(8)
+        if not traffic_data.empty:
+            fig8 = px.pie(
+                traffic_data,
+                values='Count',
+                names='Traffic Source',
+                title='Top Traffic Sources',
+                hole=0.4,
+                color_discrete_sequence=px.colors.qualitative.Prism
+            )
+            fig8.update_traces(textposition='inside', textinfo='percent+label')
+            visualizations['traffic_source_pie'] = fig8
     
     return visualizations
 
@@ -1173,8 +1451,10 @@ def main():
                 ⚠️ <strong>Note:</strong> This fetches ALL data including:<br>
                 • Lead Status & Prospect Reasons<br>
                 • Course/Program Information<br>
+                • <strong>NEW:</strong> Campaign & Traffic Source Data<br>
                 • Contact details & Analytics<br>
-                • <strong>NEW:</strong> Course Quality Analysis
+                • Course Quality Analysis<br>
+                • <strong>NEW:</strong> Campaign Performance Analysis
             </div>
             """,
             unsafe_allow_html=True
@@ -1192,7 +1472,7 @@ def main():
                 if start_date > end_date:
                     st.error("Start date must be before end date.")
                 else:
-                    with st.spinner("Fetching ALL contacts with prospect reasons..."):
+                    with st.spinner("Fetching ALL contacts with campaign & traffic data..."):
                         # Test connection first
                         success, message = test_hubspot_connection(HUBSPOT_API_KEY)
                         
@@ -1264,7 +1544,7 @@ def main():
             # Key Metrics at the top
             st.markdown("## 📈 Key Performance Indicators")
             
-            metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+            metric_col1, metric_col2, metric_col3, metric_col4, metric_col5 = st.columns(5)
             
             with metric_col1:
                 total_contacts = len(df)
@@ -1285,13 +1565,19 @@ def main():
                 course_percent = (course_count / len(df)) * 100 if len(df) > 0 else 0
                 st.metric("With Course", f"{course_count:,} ({course_percent:.1f}%)")
             
+            with metric_col5:
+                campaign_count = df['Has Campaign'].sum()
+                campaign_percent = (campaign_count / len(df)) * 100 if len(df) > 0 else 0
+                st.metric("With Campaign", f"{campaign_count:,} ({campaign_percent:.1f}%)")
+            
             st.divider()
             
-            # Create tabs for different sections - REMOVED Prospect Reasons tab
-            tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+            # Create tabs for different sections - ADDED Campaign Performance tab
+            tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
                 "📈 Lead Status Distribution", 
                 "📚 Course Distribution",
-                "🎯 Course Quality Analysis",  # MOVED to position 3
+                "🎯 Course Quality Analysis",
+                "📣 Campaign Performance",  # NEW TAB
                 "🔍 Analytics Dashboard", 
                 "🌍 Geographic Analysis", 
                 "📧 Email Validation",
@@ -1447,7 +1733,7 @@ def main():
                 else:
                     st.info("No course distribution analysis available")
             
-            with tab3:  # 🎯 FIXED: COURSE QUALITY ANALYSIS - PROPER UI
+            with tab3:  # 🎯 COURSE QUALITY ANALYSIS
                 st.markdown("### 🎯 Course-wise Lead Quality Analysis")
                 st.markdown("*Pivot table showing lead status distribution by course/program with quality metrics*")
                 
@@ -1486,7 +1772,8 @@ def main():
                         format_columns = [
                             'Not Connected (NC)', 'Not Interested', 'Not Qualified',
                             'Cold', 'Duplicate', 'Warm', 'Hot', 'Future Prospect',
-                            'Customer', 'New Lead', 'Low Quality Leads', 'Good Quality Leads',
+                            'Customer', 'New Lead', 'Upselling', 'Course Shifting',
+                            'Low Quality Leads', 'Good Quality Leads',
                             'Grand Total'
                         ]
                         
@@ -1598,7 +1885,246 @@ def main():
                 else:
                     st.info("No course quality analysis available")
             
-            with tab4:  # Analytics Dashboard
+            with tab4:  # 📣 NEW: CAMPAIGN PERFORMANCE ANALYSIS
+                st.markdown("### 📣 Campaign Performance (Traffic Source Drill-Down)")
+                st.markdown("*Pivot table showing campaign-wise lead status distribution with traffic source attribution*")
+                
+                if st.session_state.analysis_results and 'campaign_performance' in st.session_state.analysis_results:
+                    campaign_df = st.session_state.analysis_results['campaign_performance']
+                    
+                    if not campaign_df.empty:
+                        # Campaign Performance Metrics
+                        col_camp1, col_camp2, col_camp3, col_camp4 = st.columns(4)
+                        
+                        with col_camp1:
+                            total_campaigns = len(campaign_df)
+                            st.metric("Total Campaigns", total_campaigns)
+                        
+                        with col_camp2:
+                            avg_quality = campaign_df['Quality Leads %'].mean()
+                            st.metric("Avg Quality %", f"{avg_quality:.1f}%")
+                        
+                        with col_camp3:
+                            total_leads = campaign_df['Grand Total'].sum()
+                            st.metric("Total Campaign Leads", f"{total_leads:,}")
+                        
+                        with col_camp4:
+                            best_campaign = campaign_df.iloc[0]['Campaign Name'] if len(campaign_df) > 0 else "N/A"
+                            best_quality = campaign_df.iloc[0]['Quality Leads %'] if len(campaign_df) > 0 else 0
+                            st.metric("Best Campaign", best_campaign[:20], delta=f"{best_quality:.1f}%")
+                        
+                        st.divider()
+                        
+                        # 🔥 TRAFFIC SOURCE FILTER
+                        st.markdown("#### 🔍 Filter by Traffic Source")
+                        unique_sources = sorted(campaign_df['Traffic Source'].unique())
+                        selected_source = st.selectbox(
+                            "Select Traffic Source:",
+                            ["All Traffic Sources"] + list(unique_sources),
+                            key="traffic_source_filter"
+                        )
+                        
+                        # Filter data based on selection
+                        if selected_source != "All Traffic Sources":
+                            filtered_df = campaign_df[campaign_df['Traffic Source'] == selected_source].copy()
+                            st.success(f"Showing {len(filtered_df)} campaigns from {selected_source}")
+                        else:
+                            filtered_df = campaign_df.copy()
+                            st.info(f"Showing all {len(filtered_df)} campaigns across {len(unique_sources)} traffic sources")
+                        
+                        # Show traffic source distribution badges
+                        st.markdown("**Traffic Source Distribution:**")
+                        source_counts = campaign_df['Traffic Source'].value_counts()
+                        for source, count in source_counts.head(10).items():
+                            st.markdown(f'<span class="traffic-badge">{source}: {count} campaigns</span>', unsafe_allow_html=True)
+                        
+                        st.divider()
+                        
+                        # Display the main campaign performance table
+                        st.markdown("#### 📊 Campaign Performance Matrix")
+                        
+                        # Create a copy for display with formatting
+                        display_campaign_df = filtered_df.copy()
+                        
+                        # Define columns to format as integers
+                        int_columns = [
+                            'Cold', 'Warm', 'Hot', 'New Lead', 'Customer',
+                            'Not Connected (NC)', 'Not Interested', 'Not Qualified',
+                            'Duplicate', 'Upselling', 'Course Shifting',
+                            'Quality Leads (Hot+Warm+Customer)', 'Disqualified Leads', 'Grand Total'
+                        ]
+                        
+                        # Format integer columns
+                        for col in int_columns:
+                            if col in display_campaign_df.columns:
+                                display_campaign_df[col] = display_campaign_df[col].apply(lambda x: f"{int(x):,}" if pd.notnull(x) else "0")
+                        
+                        # Format percentage columns
+                        display_campaign_df['Quality Leads %'] = display_campaign_df['Quality Leads %'].apply(lambda x: f"{x:.1f}%")
+                        display_campaign_df['Disqualified %'] = display_campaign_df['Disqualified %'].apply(lambda x: f"{x:.1f}%")
+                        
+                        # Display the dataframe with proper scrolling
+                        st.dataframe(
+                            display_campaign_df,
+                            use_container_width=True,
+                            height=600,
+                            column_config={
+                                "Traffic Source": st.column_config.TextColumn("Traffic Source", width="medium"),
+                                "Campaign Name": st.column_config.TextColumn("Campaign Name", width="large"),
+                                "Quality Leads %": st.column_config.TextColumn("Quality %", width="small"),
+                                "Grand Total": st.column_config.TextColumn("Total", width="small")
+                            }
+                        )
+                        
+                        # Legend
+                        st.markdown("""
+                        <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; margin-top: 1rem;">
+                            <strong>🎯 Campaign Performance Metrics:</strong>
+                            <ul style="margin-bottom: 0;">
+                                <li><strong>Quality Leads</strong> = Hot + Warm + Customer (high-value leads)</li>
+                                <li><strong>Disqualified Leads</strong> = Not Interested + Not Qualified</li>
+                                <li><strong>Quality Leads %</strong> = Percentage of high-quality leads</li>
+                                <li><strong>Disqualified %</strong> = Percentage of disqualified leads</li>
+                            </ul>
+                            <p style="margin-top: 0.5rem; margin-bottom: 0; font-size: 0.9rem;">
+                                <span class="campaign-good">✅ High Quality % (>50%) indicates effective campaigns</span><br>
+                                <span class="campaign-bad">⚠️ High Disqualified % (>30%) indicates poor targeting</span>
+                            </p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        # Download and drill-down options
+                        st.divider()
+                        col_camp_dl1, col_camp_dl2, col_camp_dl3 = st.columns(3)
+                        
+                        with col_camp_dl1:
+                            csv_campaign = filtered_df.to_csv(index=False)
+                            st.download_button(
+                                "📥 Download Campaign Data",
+                                csv_campaign,
+                                f"campaign_performance_{datetime.now().strftime('%Y%m%d')}.csv",
+                                "text/csv",
+                                use_container_width=True
+                            )
+                        
+                        with col_camp_dl2:
+                            # Show raw numeric data
+                            if st.button("📊 View Raw Campaign Data", use_container_width=True, key="view_raw_campaign"):
+                                st.dataframe(filtered_df, use_container_width=True, height=400)
+                        
+                        with col_camp_dl3:
+                            # Show top 5 campaigns by quality
+                            if st.button("🏆 Show Top 5 Campaigns", use_container_width=True, key="top5_campaigns"):
+                                top_campaigns = filtered_df.sort_values('Quality Leads %', ascending=False).head(5)
+                                st.dataframe(
+                                    top_campaigns[['Traffic Source', 'Campaign Name', 'Quality Leads %', 'Disqualified %', 'Grand Total']], 
+                                    use_container_width=True
+                                )
+                        
+                        # Additional insights
+                        with st.expander("📈 Campaign Insights", expanded=False):
+                            # Find best and worst campaigns
+                            if not filtered_df.empty:
+                                best_campaign_row = filtered_df.loc[filtered_df['Quality Leads %'].idxmax()]
+                                worst_campaign_row = filtered_df.loc[filtered_df['Disqualified %'].idxmax()]
+                                
+                                col_ins1, col_ins2 = st.columns(2)
+                                
+                                with col_ins1:
+                                    st.markdown("**🏆 Best Performing Campaign**")
+                                    st.metric(
+                                        label=f"{best_campaign_row['Traffic Source']} - {best_campaign_row['Campaign Name'][:30]}",
+                                        value=f"{best_campaign_row['Quality Leads %']:.1f}% Quality",
+                                        delta=f"{best_campaign_row['Grand Total']} total leads"
+                                    )
+                                
+                                with col_ins2:
+                                    st.markdown("**⚠️ Worst Performing Campaign**")
+                                    st.metric(
+                                        label=f"{worst_campaign_row['Traffic Source']} - {worst_campaign_row['Campaign Name'][:30]}",
+                                        value=f"{worst_campaign_row['Disqualified %']:.1f}% Disqualified",
+                                        delta=f"{worst_campaign_row['Grand Total']} total leads"
+                                    )
+                                
+                                # Traffic source performance
+                                st.markdown("**📊 Traffic Source Performance**")
+                                source_performance = filtered_df.groupby('Traffic Source').agg({
+                                    'Grand Total': 'sum',
+                                    'Quality Leads %': 'mean',
+                                    'Disqualified %': 'mean'
+                                }).round(1).sort_values('Quality Leads %', ascending=False)
+                                
+                                st.dataframe(source_performance, use_container_width=True)
+                                
+                                # Campaign size distribution
+                                st.markdown("**📈 Campaign Size Distribution**")
+                                small_campaigns = (filtered_df['Grand Total'] < 10).sum()
+                                medium_campaigns = ((filtered_df['Grand Total'] >= 10) & (filtered_df['Grand Total'] < 50)).sum()
+                                large_campaigns = (filtered_df['Grand Total'] >= 50).sum()
+                                
+                                size_dist = pd.DataFrame({
+                                    'Campaign Size': ['Small (<10)', 'Medium (10-49)', 'Large (50+)'],
+                                    'Number of Campaigns': [small_campaigns, medium_campaigns, large_campaigns]
+                                })
+                                st.dataframe(size_dist, use_container_width=True)
+                            
+                        # 🔥 CAMPAIGN DETAIL DRILL-DOWN
+                        with st.expander("🔍 Drill Down to Specific Campaign", expanded=False):
+                            # Select campaign for drill-down
+                            campaign_options = filtered_df['Campaign Name'].unique()
+                            selected_campaign = st.selectbox(
+                                "Select Campaign for Detailed Analysis:",
+                                campaign_options,
+                                key="campaign_drilldown"
+                            )
+                            
+                            if selected_campaign:
+                                campaign_data = df[df['Campaign Name'] == selected_campaign].copy()
+                                
+                                if not campaign_data.empty:
+                                    # Campaign overview
+                                    col_cd1, col_cd2, col_cd3 = st.columns(3)
+                                    
+                                    with col_cd1:
+                                        campaign_leads = len(campaign_data)
+                                        st.metric("Total Leads", campaign_leads)
+                                    
+                                    with col_cd2:
+                                        traffic_source = campaign_data['Traffic Source'].iloc[0]
+                                        st.metric("Traffic Source", traffic_source)
+                                    
+                                    with col_cd3:
+                                        quality_leads = campaign_data[campaign_data['Lead Status'].isin(['Hot', 'Warm', 'Customer'])].shape[0]
+                                        quality_pct = (quality_leads / campaign_leads * 100) if campaign_leads > 0 else 0
+                                        st.metric("Quality Leads", quality_leads, delta=f"{quality_pct:.1f}%")
+                                    
+                                    # Lead status breakdown for this campaign
+                                    st.markdown("**Lead Status Breakdown**")
+                                    campaign_status = campaign_data['Lead Status'].value_counts().reset_index()
+                                    campaign_status.columns = ['Lead Status', 'Count']
+                                    campaign_status['Percentage'] = (campaign_status['Count'] / campaign_status['Count'].sum() * 100).round(1)
+                                    st.dataframe(campaign_status, use_container_width=True)
+                                    
+                                    # Course distribution for this campaign
+                                    if campaign_data['Course/Program'].notna().any():
+                                        st.markdown("**Course Distribution**")
+                                        campaign_courses = campaign_data['Course/Program'].value_counts().reset_index()
+                                        campaign_courses.columns = ['Course/Program', 'Count']
+                                        st.dataframe(campaign_courses.head(10), use_container_width=True)
+                                        
+                    else:
+                        st.info("No campaign performance data available (no contacts with campaign information)")
+                        
+                        # Show how many contacts have campaign info
+                        campaign_count = df['Has Campaign'].sum()
+                        if campaign_count > 0:
+                            st.info(f"Found {campaign_count} contacts with campaign information")
+                        else:
+                            st.warning("No campaign/traffic source information found in the contacts data")
+                else:
+                    st.info("No campaign performance analysis available")
+            
+            with tab5:  # Analytics Dashboard
                 st.markdown("### 📈 Comprehensive Analytics")
                 
                 if st.session_state.analysis_results and st.session_state.visualizations:
@@ -1616,54 +2142,54 @@ def main():
                         if 'course_bar' in visuals:
                             st.plotly_chart(visuals['course_bar'], use_container_width=True)
                     
-                    # Row 2: Pie Charts
+                    # Row 2: Traffic Source and Country
                     col_e1, col_e2 = st.columns(2)
                     
                     with col_e1:
-                        if 'lead_status_pie' in visuals:
-                            st.plotly_chart(visuals['lead_status_pie'], use_container_width=True)
+                        if 'traffic_source_bar' in visuals:
+                            st.plotly_chart(visuals['traffic_source_bar'], use_container_width=True)
                     
                     with col_e2:
-                        if 'course_pie' in visuals:
-                            st.plotly_chart(visuals['course_pie'], use_container_width=True)
-                    
-                    # Row 3: Country and Trend
-                    col_f1, col_f2 = st.columns(2)
-                    
-                    with col_f1:
                         if 'country_bar' in visuals:
                             st.plotly_chart(visuals['country_bar'], use_container_width=True)
                     
+                    # Row 3: Pie Charts
+                    col_f1, col_f2 = st.columns(2)
+                    
+                    with col_f1:
+                        if 'lead_status_pie' in visuals:
+                            st.plotly_chart(visuals['lead_status_pie'], use_container_width=True)
+                    
                     with col_f2:
-                        if 'monthly_trend' in visuals:
-                            st.plotly_chart(visuals['monthly_trend'], use_container_width=True)
+                        if 'traffic_source_pie' in visuals:
+                            st.plotly_chart(visuals['traffic_source_pie'], use_container_width=True)
                     
                     # Data Tables
                     st.markdown("### 📋 Detailed Statistics")
                     
-                    analysis_tabs = st.tabs(["Courses", "Countries", "Industries", "Lifecycle", "Completeness"])
+                    analysis_tabs = st.tabs(["Traffic Sources", "Courses", "Countries", "Industries", "Completeness"])
                     
                     with analysis_tabs[0]:
+                        if 'traffic_source_distribution' in analysis:
+                            st.dataframe(analysis['traffic_source_distribution'], use_container_width=True, height=300)
+                    
+                    with analysis_tabs[1]:
                         if 'course_distribution' in analysis:
                             st.dataframe(analysis['course_distribution'], use_container_width=True, height=300)
                     
-                    with analysis_tabs[1]:
+                    with analysis_tabs[2]:
                         if 'country_distribution' in analysis:
                             st.dataframe(analysis['country_distribution'], use_container_width=True, height=300)
                     
-                    with analysis_tabs[2]:
+                    with analysis_tabs[3]:
                         if 'industry_distribution' in analysis:
                             st.dataframe(analysis['industry_distribution'], use_container_width=True, height=300)
-                    
-                    with analysis_tabs[3]:
-                        if 'stage_distribution' in analysis:
-                            st.dataframe(analysis['stage_distribution'], use_container_width=True, height=300)
                     
                     with analysis_tabs[4]:
                         if 'completeness' in analysis:
                             st.dataframe(analysis['completeness'], use_container_width=True, height=300)
             
-            with tab5:  # Geographic Analysis
+            with tab6:  # Geographic Analysis
                 st.markdown("### 🌍 Geographic Distribution")
                 
                 if st.session_state.analysis_results:
@@ -1687,7 +2213,7 @@ def main():
                         # Country data table
                         st.dataframe(country_data, use_container_width=True, height=400)
             
-            with tab6:  # Email Validation
+            with tab7:  # Email Validation
                 st.markdown("### 📧 Email Validation")
                 
                 if st.session_state.email_validation is not None:
@@ -1718,7 +2244,7 @@ def main():
                     else:
                         st.success("✅ All emails appear valid!")
             
-            with tab7:  # Export Data
+            with tab8:  # Export Data
                 st.markdown("### 📥 Export Options")
                 
                 # First row of export buttons
@@ -1790,6 +2316,17 @@ def main():
                             )
                     
                     with export_row2[2]:
+                        if 'campaign_performance' in st.session_state.analysis_results:
+                            csv = st.session_state.analysis_results['campaign_performance'].to_csv(index=False)
+                            st.download_button(
+                                "📣 Campaign Performance",
+                                csv,
+                                "campaign_performance.csv",
+                                "text/csv",
+                                use_container_width=True
+                            )
+                    
+                    with export_row2[3]:
                         if 'course_quality' in st.session_state.analysis_results:
                             csv = st.session_state.analysis_results['course_quality'].to_csv(index=False)
                             st.download_button(
@@ -1799,16 +2336,6 @@ def main():
                                 "text/csv",
                                 use_container_width=True
                             )
-                    
-                    with export_row2[3]:
-                        # Other exports if needed
-                        st.download_button(
-                            "📋 All Analysis",
-                            "",
-                            disabled=True,
-                            help="Combine all analyses in Excel download above",
-                            use_container_width=True
-                        )
             
             # Footer
             st.divider()
@@ -1818,7 +2345,8 @@ def main():
                 <strong>HubSpot Contacts Analytics Dashboard</strong> • Built with Streamlit • 
                 Data last fetched: {datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S")} IST • 
                 <span style='color: #00a86b; font-weight: bold;'>✅ LEAD STATUS NORMALIZATION ACTIVE</span> • 
-                <span style='color: #1a73e8; font-weight: bold;'>🎯 COURSE QUALITY ANALYSIS ENABLED</span>
+                <span style='color: #1a73e8; font-weight: bold;'>🎯 CAMPAIGN PERFORMANCE ENABLED</span> • 
+                <span style='color: #ff6b35; font-weight: bold;'>📣 TRAFFIC SOURCE DRILL-DOWN</span>
                 </div>
                 """,
                 unsafe_allow_html=True
@@ -1829,24 +2357,26 @@ def main():
             st.markdown(
                 """
                 <div style='text-align: center; padding: 3rem;'>
-                    <h2>👋 Welcome to HubSpot Contacts Dashboard</h2>
+                    <h2>👋 Welcome to HubSpot Contacts Analytics Dashboard</h2>
                     <p style='font-size: 1.1rem; color: #666; margin: 1rem 0;'>
                         Configure date filters and click "Fetch ALL Contacts" to start analysis
                     </p>
                     <div style='margin-top: 2rem;'>
-                        <p>🎯 <strong>Key Features (FIXED & ENHANCED):</strong></p>
+                        <p>🎯 <strong>Key Features (ENHANCED):</strong></p>
                         <ul style='text-align: left; margin-left: 30%;'>
-                            <li>✅ <strong>Course Quality Analysis</strong> - NEW Pivot Table</li>
+                            <li>✅ <strong>Course Quality Analysis</strong> - Pivot Table</li>
                             <li>✅ <strong>Correct Lead Status Counts</strong> - Old values merged</li>
                             <li>✅ <strong>Course Distribution</strong> with counts</li>
                             <li>✅ <strong>UNLIMITED fetching</strong> - Gets ALL records</li>
+                            <li>🔥 <strong>NEW: Campaign Performance Analysis</strong> - Traffic Source Drill-Down</li>
+                            <li>🔥 <strong>NEW: Traffic Source Attribution</strong> - hs_analytics_source & hs_analytics_source_data_1</li>
                         </ul>
-                        <p style='margin-top: 2rem;'>📊 <strong>New Course Quality Analysis Includes:</strong></p>
+                        <p style='margin-top: 2rem;'>📊 <strong>New Campaign Performance Analysis Includes:</strong></p>
                         <ul style='text-align: left; margin-left: 30%;'>
-                            <li>🎯 <strong>Pivot Table</strong> - Course × Lead Status matrix</li>
-                            <li>🔴 <strong>Low Quality Leads</strong> = Not Interested + Not Qualified</li>
-                            <li>🟢 <strong>Good Quality Leads</strong> = Cold + Warm + Hot</li>
-                            <li>📈 <strong>Quality Metrics</strong> - Percentage calculations</li>
+                            <li>📣 <strong>Pivot Table</strong> - Campaign × Lead Status matrix</li>
+                            <li>🔍 <strong>Traffic Source Filter</strong> - Google, Facebook, Email, etc.</li>
+                            <li>🎯 <strong>Quality Metrics</strong> - Hot+Warm+Customer vs Disqualified</li>
+                            <li>📈 <strong>Drill-Down Analysis</strong> - Campaign-specific lead breakdown</li>
                             <li>📥 <strong>Export Ready</strong> - Download complete analysis</li>
                         </ul>
                     </div>
