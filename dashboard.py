@@ -886,6 +886,7 @@ def build_sub_lead_matrix(df):
     """
     📊 BUILD SUB LEAD MATRIX (Lead Status × Sub Lead Status)
     Creates a pivot table with Lead Status in rows and Sub Lead Status in columns
+    Shows count of contacts for each combination
     """
     # Keep only records with sub lead info
     df_with_sub = df[df['Has Sub Lead'] == 1].copy()
@@ -893,7 +894,7 @@ def build_sub_lead_matrix(df):
     if df_with_sub.empty:
         return pd.DataFrame()
     
-    # Split combined sub lead statuses and explode
+    # Split combined sub lead statuses and explode to get one row per sub lead
     df_with_sub['Sub Lead Split'] = df_with_sub['Sub Lead Status'].str.split(', ')
     df_exploded = df_with_sub.explode('Sub Lead Split')
     
@@ -906,7 +907,11 @@ def build_sub_lead_matrix(df):
     if df_exploded.empty:
         return pd.DataFrame()
     
-    # Create pivot table: Lead Status × Sub Lead Status
+    # Get all unique lead statuses and sub lead statuses
+    lead_statuses = sorted(df_exploded['Lead Status'].unique())
+    sub_lead_statuses = sorted(df_exploded['Sub Lead Clean'].unique())
+    
+    # Create the matrix using pivot_table
     pivot = pd.pivot_table(
         df_exploded,
         index='Lead Status',
@@ -919,7 +924,7 @@ def build_sub_lead_matrix(df):
     # Reset index to make Lead Status a column
     pivot = pivot.reset_index()
     
-    # Rename index column
+    # Rename the index column
     pivot = pivot.rename(columns={'Lead Status': 'Lead Status \\ Sub Lead Status'})
     
     # Sort columns alphabetically for better readability
@@ -930,10 +935,16 @@ def build_sub_lead_matrix(df):
     sub_lead_columns = [col for col in pivot.columns if col != 'Lead Status \\ Sub Lead Status']
     pivot['Grand Total'] = pivot[sub_lead_columns].sum(axis=1)
     
-    # Add a Total column at the end
-    total_row = pd.DataFrame(pivot[sub_lead_columns].sum()).T
+    # Add a Total row at the bottom
+    total_row = pd.DataFrame(index=[0])
     total_row['Lead Status \\ Sub Lead Status'] = 'Grand Total'
+    
+    for col in sub_lead_columns:
+        total_row[col] = pivot[col].sum()
+    
     total_row['Grand Total'] = total_row[sub_lead_columns].sum(axis=1)
+    
+    # Ensure all columns are in the same order
     total_row = total_row[column_order + ['Grand Total']]
     
     # Concatenate with original pivot
@@ -981,7 +992,6 @@ def build_course_quality_table(df):
         'Duplicate', 
         'Warm', 
         'Hot', 
-        'Future Prospect',
         'Customer',
         'New Lead',
         'Upselling',
@@ -1316,7 +1326,7 @@ def analyze_contact_data(df):
             df['Has Course'].sum(),
             df['Has Traffic Source'].sum(),
             df['Has Campaign'].sum(),
-            df['Has Drilldown 2'].sum(),  # 🔥 NEW
+            df['Has Drilldown 2'].sum(),
             df['Has Sub Lead'].sum()
         ],
         'Percentage': [
@@ -1326,7 +1336,7 @@ def analyze_contact_data(df):
             (df['Has Course'].sum() / len(df)) * 100,
             (df['Has Traffic Source'].sum() / len(df)) * 100,
             (df['Has Campaign'].sum() / len(df)) * 100,
-            (df['Has Drilldown 2'].sum() / len(df)) * 100,  # 🔥 NEW
+            (df['Has Drilldown 2'].sum() / len(df)) * 100,
             (df['Has Sub Lead'].sum() / len(df)) * 100
         ]
     }
@@ -1984,14 +1994,10 @@ def main():
                         # Create a copy for display with formatting
                         display_df = quality_df.copy()
                         
-                        # Store original numeric values for comparison
-                        low_quality_values = display_df['Low Quality %'].copy()
-                        good_quality_values = display_df['Good Quality %'].copy()
-                        
                         # Format numeric columns for better display
                         format_columns = [
                             'Not Connected (NC)', 'Not Interested', 'Not Qualified',
-                            'Cold', 'Duplicate', 'Warm', 'Hot', 'Future Prospect',
+                            'Cold', 'Duplicate', 'Warm', 'Hot',
                             'Customer', 'New Lead', 'Upselling', 'Course Shifting',
                             'Low Quality Leads', 'Good Quality Leads',
                             'Grand Total'
@@ -2365,7 +2371,7 @@ def main():
                                     
                                     st.dataframe(dd2_performance, use_container_width=True)
                             
-                        # 🔥 DEEP DRILL-DOWN TO SPECIFIC PATH (FIXED DATE ERROR)
+                        # 🔥 DEEP DRILL-DOWN TO SPECIFIC PATH
                         with st.expander("🔍 Deep Drill-Down to Specific Path", expanded=False):
                             if not filtered_df.empty:
                                 # Create path identifiers for selection
@@ -2411,9 +2417,8 @@ def main():
                                             st.metric("Drill-Down 2", drilldown_value[:20])
                                         
                                         with col_pd4:
-                                            # 🔥 FIXED: Handle date properly
+                                            # Handle date properly
                                             if not path_contacts['Created Date'].isna().all():
-                                                # Get mean as timestamp and convert to date
                                                 try:
                                                     avg_timestamp = path_contacts['Created Date'].dropna().mean()
                                                     if pd.notnull(avg_timestamp):
@@ -2470,7 +2475,7 @@ def main():
             
             with tab5:  # 🔍 SUB LEAD MATRIX (NEW TAB)
                 st.markdown("### 🔍 Sub Lead Status Matrix")
-                st.markdown("*Pivot table showing Lead Status (rows) vs Sub Lead Status (columns)*")
+                st.markdown("*Pivot table showing Lead Status (rows) vs Sub Lead Status (columns) with count values*")
                 
                 if st.session_state.analysis_results and 'sub_lead_matrix' in st.session_state.analysis_results:
                     sub_lead_matrix = st.session_state.analysis_results['sub_lead_matrix']
@@ -2488,7 +2493,7 @@ def main():
                         with col_sub2:
                             # Total contacts with sub lead info (sum of all counts)
                             total_with_sub = sub_lead_matrix.loc[sub_lead_matrix['Lead Status \\ Sub Lead Status'] != 'Grand Total', 'Grand Total'].sum() if 'Grand Total' in sub_lead_matrix.columns else 0
-                            st.metric("Contacts with Sub Lead", f"{total_with_sub:,}")
+                            st.metric("Contacts with Sub Lead", f"{total_with_sub:,.0f}")
                         
                         with col_sub3:
                             # Coverage percentage
@@ -2499,7 +2504,7 @@ def main():
                         st.divider()
                         
                         # Display the sub lead matrix
-                        st.markdown("#### Lead Status × Sub Lead Status Matrix")
+                        st.markdown("#### Lead Status × Sub Lead Status Matrix (Counts)")
                         
                         # Create a copy for display with formatting
                         display_sub_df = sub_lead_matrix.copy()
@@ -2571,8 +2576,13 @@ def main():
                                 # Get sub lead columns (exclude index and Grand Total)
                                 sub_cols = [col for col in heatmap_data.columns if col not in ['Lead Status \\ Sub Lead Status', 'Grand Total']]
                                 
+                                # Convert columns back to numeric for heatmap
+                                heatmap_numeric = heatmap_data[sub_cols].copy()
+                                for col in sub_cols:
+                                    heatmap_numeric[col] = pd.to_numeric(heatmap_numeric[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
+                                
                                 # Create heatmap matrix
-                                heatmap_matrix = heatmap_data[sub_cols].values
+                                heatmap_matrix = heatmap_numeric.values
                                 
                                 # Create heatmap using plotly
                                 fig_heatmap = go.Figure(data=go.Heatmap(
@@ -2632,7 +2642,7 @@ def main():
                                         status_data = melted[melted['Lead Status \\ Sub Lead Status'] == lead_status]
                                         if not status_data.empty:
                                             top_sub = status_data.sort_values('Count', ascending=False).iloc[0]
-                                            st.info(f"**{lead_status}**: Most common sub lead is '{top_sub['Sub Lead Status']}' ({int(top_sub['Count'])} contacts)")
+                                            st.info(f"**{lead_status}**: Most common sub lead is '{top_sub['Sub Lead Status']}' ({int(top_sub['Count']):,} contacts)")
                     
                     else:
                         st.info("No sub lead matrix data available (no contacts with sub lead/prospect reason information)")
