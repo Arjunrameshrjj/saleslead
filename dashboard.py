@@ -226,41 +226,74 @@ LEAD_STATUS_MAP = {
     "other": "Unknown"
 }
 
-# 🔥 PROSPECT REASONS MAPPING - MODIFIED TO PRESERVE ORIGINAL NAMES
-# This is now only for categorizing, not for renaming
-PROSPECT_REASON_CATEGORIES = {
-    # Hot reasons
-    "hot_prospect": "Hot",
-    "urgent": "Hot",
+# 🔥 PROSPECT REASONS CLEANING - PRESERVE ORIGINAL NAMES
+def clean_reason_text(reason):
+    """Clean up reason text without mapping to categories"""
+    if not reason:
+        return ""
     
-    # Warm reasons
-    "warm_prospect": "Warm",
-    "interested": "Warm",
-    "follow_up": "Warm",
+    reason_str = str(reason).strip()
     
-    # Cold reasons
-    "cold_prospect": "Cold",
-    "neutral_prospect": "Cold",
-    "future_prospect": "Cold",
+    # Common specific mappings that preserve the original meaning
+    special_mappings = {
+        "call_back_later": "Call Back Later",
+        "call back later": "Call Back Later",
+        "callback": "Call Back Later",
+        "not_connected": "Not Connected",
+        "not connected": "Not Connected",
+        "not_interested": "Not Interested",
+        "not interested": "Not Interested",
+        "not_qualified": "Not Qualified",
+        "not qualified": "Not Qualified",
+        "no_requirement": "No Requirement",
+        "no requirement": "No Requirement",
+        "price_issue": "Price Issue",
+        "price issue": "Price Issue",
+        "budget_issue": "Budget Issue",
+        "budget issue": "Budget Issue",
+        "future_prospect": "Future Prospect",
+        "future prospect": "Future Prospect",
+        "neutral_prospect": "Neutral Prospect",
+        "neutral prospect": "Neutral Prospect",
+        "hot_prospect": "Hot Prospect",
+        "hot prospect": "Hot Prospect",
+        "warm_prospect": "Warm Prospect",
+        "warm prospect": "Warm Prospect",
+        "cold_prospect": "Cold Prospect",
+        "cold prospect": "Cold Prospect",
+        "wrong_course": "Wrong Course Enquiry",
+        "wrong course": "Wrong Course Enquiry",
+        "casual_enquiry": "Casual Enquiry",
+        "casual enquiry": "Casual Enquiry",
+        "connected_unknowingly": "Connected Unknowingly",
+        "connected unknowingly": "Connected Unknowingly",
+        "out_of_coverage": "Out of Coverage",
+        "out of coverage": "Out of Coverage",
+        "not_answering": "Not Answering",
+        "not answering": "Not Answering",
+        "user_busy": "User Busy",
+        "user busy": "User Busy",
+        "disconnected_by_user": "Disconnected by User",
+        "disconnected by user": "Disconnected by User",
+        "hr_calls": "HR Calls",
+        "hr calls": "HR Calls",
+        "other_reasons": "Other Reasons",
+        "other reasons": "Other Reasons",
+        "agreed_on_fee": "Agreed On Fee: Awaiting Payment",
+        "agreed on fee": "Agreed On Fee: Awaiting Payment",
+        "shared_documents": "Shared Documents For Admission",
+        "shared documents": "Shared Documents For Admission"
+    }
     
-    # Disqualified reasons
-    "not_connected": "Not Connected",
-    "not_interested": "Not Interested",
-    "unqualified": "Not Qualified",
-    "not_qualified": "Not Qualified",
+    # Check for special mappings first
+    reason_lower = reason_str.lower()
+    for key, value in special_mappings.items():
+        if key in reason_lower:
+            return value
     
-    # Contact reasons
-    "call_back_later": "Call Back Later",
-    "callback": "Call Back Later",
-    
-    # Price reasons
-    "price_issue": "Price Issue",
-    "budget_issue": "Budget Issue",
-    
-    # Business reasons
-    "no_requirement": "No Requirement",
-    "competitor": "Competitor"
-}
+    # If no special mapping, clean up formatting
+    cleaned = reason_str.replace("_", " ").replace("-", " ").title()
+    return cleaned
 
 # 🔥 TRAFFIC SOURCE CATEGORIZATION
 TRAFFIC_SOURCE_CATEGORIES = {
@@ -670,71 +703,6 @@ def normalize_traffic_source(raw_source):
     # Return cleaned version
     return source_str.title()
 
-def clean_reason_text(reason):
-    """Clean up reason text without mapping to categories"""
-    if not reason:
-        return ""
-    
-    reason_str = str(reason).strip()
-    
-    # Just clean up formatting, don't map to categories
-    cleaned = reason_str.replace("_", " ").replace("-", " ").title()
-    
-    # Common specific mappings that preserve the original meaning
-    special_mappings = {
-        "call_back_later": "Call Back Later",
-        "call back later": "Call Back Later",
-        "callback": "Call Back Later",
-        "not_connected": "Not Connected",
-        "not connected": "Not Connected",
-        "not_interested": "Not Interested",
-        "not interested": "Not Interested",
-        "not_qualified": "Not Qualified",
-        "not qualified": "Not Qualified",
-        "no_requirement": "No Requirement",
-        "no requirement": "No Requirement",
-        "price_issue": "Price Issue",
-        "price issue": "Price Issue",
-        "budget_issue": "Budget Issue",
-        "budget issue": "Budget Issue",
-        "future_prospect": "Future Prospect",
-        "future prospect": "Future Prospect",
-        "neutral_prospect": "Neutral Prospect",
-        "neutral prospect": "Neutral Prospect",
-        "hot_prospect": "Hot Prospect",
-        "hot prospect": "Hot Prospect",
-        "warm_prospect": "Warm Prospect",
-        "warm prospect": "Warm Prospect",
-        "cold_prospect": "Cold Prospect",
-        "cold prospect": "Cold Prospect",
-        "wrong_course": "Wrong Course Enquiry",
-        "wrong course": "Wrong Course Enquiry",
-        "casual_enquiry": "Casual Enquiry",
-        "casual enquiry": "Casual Enquiry",
-        "connected_unknowingly": "Connected Unknowingly",
-        "connected unknowingly": "Connected Unknowingly",
-        "out_of_coverage": "Out of Coverage",
-        "out of coverage": "Out of Coverage",
-        "not_answering": "Not Answering",
-        "not answering": "Not Answering",
-        "user_busy": "User Busy",
-        "user busy": "User Busy",
-        "disconnected_by_user": "Disconnected by User",
-        "disconnected by user": "Disconnected by User",
-        "hr_calls": "HR Calls",
-        "hr calls": "HR Calls",
-        "other_reasons": "Other Reasons",
-        "other reasons": "Other Reasons"
-    }
-    
-    # Check for special mappings first
-    reason_lower = reason_str.lower()
-    for key, value in special_mappings.items():
-        if key in reason_lower:
-            return value
-    
-    return cleaned
-
 def process_contacts_data(contacts):
     """Process raw contacts data into a clean DataFrame with correct normalization."""
     if not contacts:
@@ -905,9 +873,11 @@ def process_contacts_data(contacts):
 
 def build_sub_lead_matrix(df):
     """
-    📊 BUILD SUB LEAD MATRIX (Sub Lead Reasons × Count)
-    Creates a simple two-column table matching the Excel format:
-    Row Labels (reasons) | Count of Sub Lead Status
+    📊 BUILD SUB LEAD MATRIX (Lead Status × Sub Lead Reasons)
+    Creates a pivot table with:
+    - Rows: Lead Status
+    - Columns: Sub Lead Reasons
+    - Values: Count of occurrences
     """
     # Keep only records with sub lead info
     df_with_sub = df[df['Has Sub Lead'] == 1].copy()
@@ -928,22 +898,47 @@ def build_sub_lead_matrix(df):
     if df_exploded.empty:
         return pd.DataFrame()
     
-    # Create simple two-column table: Reason and Count (exactly like Excel)
-    sub_lead_counts = df_exploded['Sub Lead Clean'].value_counts().reset_index()
-    sub_lead_counts.columns = ['Row Labels', 'Count of Sub Lead Status']
+    # Create pivot table: Lead Status (rows) × Sub Lead Reasons (columns)
+    pivot = pd.pivot_table(
+        df_exploded,
+        index='Lead Status',
+        columns='Sub Lead Clean',
+        values='ID',
+        aggfunc='count',
+        fill_value=0
+    )
     
-    # Sort by count descending
-    sub_lead_counts = sub_lead_counts.sort_values('Count of Sub Lead Status', ascending=False)
+    # Reset index to make Lead Status a column
+    pivot = pivot.reset_index()
     
-    # Add Grand Total row at the bottom
-    grand_total = sub_lead_counts['Count of Sub Lead Status'].sum()
-    total_row = pd.DataFrame({
-        'Row Labels': ['Grand Total'],
-        'Count of Sub Lead Status': [grand_total]
-    })
-    sub_lead_counts = pd.concat([sub_lead_counts, total_row], ignore_index=True)
+    # Rename the index column
+    pivot = pivot.rename(columns={'Lead Status': 'Lead Status \\ Sub Lead Reasons'})
     
-    return sub_lead_counts
+    # Sort columns alphabetically for better readability
+    sub_lead_columns = [col for col in pivot.columns if col != 'Lead Status \\ Sub Lead Reasons']
+    sub_lead_columns_sorted = sorted(sub_lead_columns)
+    column_order = ['Lead Status \\ Sub Lead Reasons'] + sub_lead_columns_sorted
+    pivot = pivot[column_order]
+    
+    # Calculate Grand Total per row
+    pivot['Grand Total'] = pivot[sub_lead_columns_sorted].sum(axis=1)
+    
+    # Add a Total row at the bottom
+    total_row = pd.DataFrame(index=[0])
+    total_row['Lead Status \\ Sub Lead Reasons'] = 'Grand Total'
+    
+    for col in sub_lead_columns_sorted:
+        total_row[col] = pivot[col].sum()
+    
+    total_row['Grand Total'] = total_row[sub_lead_columns_sorted].sum(axis=1)
+    
+    # Ensure all columns are in the same order
+    total_row = total_row[column_order + ['Grand Total']]
+    
+    # Concatenate with original pivot
+    pivot = pd.concat([pivot, total_row], ignore_index=True)
+    
+    return pivot
 
 def build_course_quality_table(df):
     """
@@ -1260,7 +1255,7 @@ def analyze_contact_data(df):
     if not sub_lead_dist.empty:
         analysis['sub_lead_distribution'] = sub_lead_dist
     
-    # 1c. 🔥 NEW: Sub Lead Reasons Matrix (Excel format)
+    # 1c. 🔥 NEW: Lead Status × Sub Lead Reasons Matrix (Pivot Table)
     sub_lead_matrix = build_sub_lead_matrix(df)
     if not sub_lead_matrix.empty:
         analysis['sub_lead_matrix'] = sub_lead_matrix
@@ -1678,7 +1673,7 @@ def main():
                 • Lead Status & Prospect Reasons<br>
                 • Course/Program Information<br>
                 • <strong>COMPLETE HIERARCHY:</strong> Traffic Source → Campaign → Drill-Down 2<br>
-                • <strong>NEW: Sub Lead Reasons Matrix</strong> (Excel format: Individual reason counts)<br>
+                • <strong>NEW: Lead Status × Sub Lead Reasons Matrix</strong> (Pivot Table)<br>
                 • Contact details & Analytics<br>
                 • Course Quality Analysis<br>
                 • <strong>3-LEVEL:</strong> Campaign Performance Analysis
@@ -1800,7 +1795,7 @@ def main():
                 "📚 Course Distribution",
                 "🎯 Course Quality",
                 "📣 Campaign Performance",
-                "🔍 SUB LEAD REASONS",  # Renamed for clarity
+                "🔍 LEAD × SUB LEAD MATRIX",  # Renamed for clarity
                 "📊 Analytics Dashboard", 
                 "🌍 Geographic Analysis", 
                 "📧 Email Validation",
@@ -2227,9 +2222,9 @@ def main():
                 else:
                     st.info("No campaign performance analysis available")
             
-            with tab5:  # 🔍 SUB LEAD REASONS MATRIX (EXCEL FORMAT)
-                st.markdown("### 🔍 Sub Lead Reasons Matrix")
-                st.markdown("*Excel format showing individual reason counts - exactly like your screenshot*")
+            with tab5:  # 🔍 LEAD × SUB LEAD MATRIX (PIVOT TABLE)
+                st.markdown("### 🔍 Lead Status × Sub Lead Reasons Matrix")
+                st.markdown("*Pivot table showing Lead Status (rows) vs Sub Lead Reasons (columns) with count values*")
                 
                 if st.session_state.analysis_results and 'sub_lead_matrix' in st.session_state.analysis_results:
                     sub_lead_matrix = st.session_state.analysis_results['sub_lead_matrix']
@@ -2239,12 +2234,14 @@ def main():
                         col_sub1, col_sub2, col_sub3 = st.columns(3)
                         
                         with col_sub1:
-                            unique_reasons = len(sub_lead_matrix[sub_lead_matrix['Row Labels'] != 'Grand Total'])
-                            st.metric("Unique Reasons", unique_reasons)
+                            unique_lead_statuses = len(sub_lead_matrix[sub_lead_matrix['Lead Status \\ Sub Lead Reasons'] != 'Grand Total'])
+                            st.metric("Lead Statuses with Reasons", unique_lead_statuses)
                         
                         with col_sub2:
-                            total_reasons = sub_lead_matrix.loc[sub_lead_matrix['Row Labels'] != 'Grand Total', 'Count of Sub Lead Status'].sum()
-                            st.metric("Total Reason Count", f"{total_reasons:,.0f}")
+                            # Count unique sub lead reasons (excluding first column and Grand Total column)
+                            sub_lead_cols = [col for col in sub_lead_matrix.columns if col not in ['Lead Status \\ Sub Lead Reasons', 'Grand Total']]
+                            unique_reasons = len(sub_lead_cols)
+                            st.metric("Unique Sub Lead Reasons", unique_reasons)
                         
                         with col_sub3:
                             total_contacts = len(df)
@@ -2254,37 +2251,40 @@ def main():
                         
                         st.divider()
                         
-                        # Display the sub lead matrix in Excel format
-                        st.markdown("#### Sub Lead Reasons - Count Matrix")
+                        # Display the sub lead matrix
+                        st.markdown("#### Lead Status × Sub Lead Reasons Matrix")
                         
                         # Create a copy for display with formatting
                         display_sub_df = sub_lead_matrix.copy()
                         
-                        # Format the count column with commas
-                        display_sub_df['Count of Sub Lead Status'] = display_sub_df['Count of Sub Lead Status'].apply(lambda x: f"{int(x):,}")
+                        # Format all numeric columns (except the index column)
+                        for col in display_sub_df.columns:
+                            if col != 'Lead Status \\ Sub Lead Reasons':
+                                if display_sub_df[col].dtype in ['int64', 'float64']:
+                                    display_sub_df[col] = display_sub_df[col].apply(lambda x: f"{int(x):,}" if pd.notnull(x) and x > 0 else "0")
                         
-                        # Display the dataframe exactly like Excel
+                        # Display the dataframe with proper scrolling
                         st.dataframe(
                             display_sub_df,
                             use_container_width=True,
-                            height=500,
+                            height=600,
                             column_config={
-                                "Row Labels": st.column_config.TextColumn("Row Labels (Reasons)", width="large"),
-                                "Count of Sub Lead Status": st.column_config.TextColumn("Count", width="medium")
+                                "Lead Status \\ Sub Lead Reasons": st.column_config.TextColumn("Lead Status", width="medium")
                             }
                         )
                         
                         # Legend and explanation
                         st.markdown("""
                         <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; margin-top: 1rem;">
-                            <strong>📊 Excel Format Matrix:</strong>
+                            <strong>📊 Matrix Interpretation:</strong>
                             <ul style="margin-bottom: 0;">
-                                <li><strong>Row Labels</strong> = Individual sub lead reasons (User Busy, Call Back Request, Not answering, etc.)</li>
-                                <li><strong>Count of Sub Lead Status</strong> = Number of occurrences for each reason</li>
-                                <li><strong>Grand Total</strong> = Total number of reason occurrences</li>
+                                <li><strong>Rows</strong> = Lead Status categories (Cold, Warm, Hot, Not Connected, etc.)</li>
+                                <li><strong>Columns</strong> = Sub Lead Reasons (User Busy, Call Back Request, Not answering, etc.)</li>
+                                <li><strong>Values</strong> = Number of contacts with that Lead Status and Sub Lead Reason combination</li>
+                                <li><strong>Grand Total</strong> = Total contacts per Lead Status (row) or per Sub Lead Reason (column)</li>
                             </ul>
                             <p style="margin-top: 0.5rem; margin-bottom: 0; font-size: 0.9rem;">
-                                This matches exactly the Excel format from your screenshot.
+                                <strong>Example:</strong> Shows for "Not Connected" leads, how many are "User Busy", "Not Answering", etc.
                             </p>
                         </div>
                         """, unsafe_allow_html=True)
@@ -2296,9 +2296,9 @@ def main():
                         with col_sub_dl1:
                             csv_sub = sub_lead_matrix.to_csv(index=False)
                             st.download_button(
-                                "📥 Download Sub Lead Matrix (Excel Format)",
+                                "📥 Download Lead × Sub Lead Matrix",
                                 csv_sub,
-                                "sub_lead_reasons_matrix.csv",
+                                "lead_sub_lead_matrix.csv",
                                 "text/csv",
                                 use_container_width=True
                             )
@@ -2520,9 +2520,9 @@ def main():
                         if 'sub_lead_matrix' in st.session_state.analysis_results:
                             csv = st.session_state.analysis_results['sub_lead_matrix'].to_csv(index=False)
                             st.download_button(
-                                "🔍 Sub Lead Reasons Matrix",
+                                "🔍 Lead × Sub Lead Matrix",
                                 csv,
-                                "sub_lead_reasons_matrix.csv",
+                                "lead_sub_lead_matrix.csv",
                                 "text/csv",
                                 use_container_width=True
                             )
@@ -2558,7 +2558,7 @@ def main():
                 Data last fetched: {datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S")} IST • 
                 <span style='color: #00a86b; font-weight: bold;'>✅ LEAD STATUS NORMALIZATION ACTIVE</span> • 
                 <span style='color: #1a73e8; font-weight: bold;'>📣 3-LEVEL HIERARCHY ENABLED</span> • 
-                <span style='color: #ff6b35; font-weight: bold;'>🎯 SUB LEAD REASONS MATRIX (INDIVIDUAL REASONS)</span>
+                <span style='color: #ff6b35; font-weight: bold;'>🎯 LEAD × SUB LEAD MATRIX (PIVOT TABLE)</span>
                 </div>
                 """,
                 unsafe_allow_html=True
@@ -2580,7 +2580,7 @@ def main():
                             <li>✅ <strong>Correct Lead Status Counts</strong> - Old values merged</li>
                             <li>✅ <strong>Course Distribution</strong> with counts</li>
                             <li>✅ <strong>UNLIMITED fetching</strong> - Gets ALL records</li>
-                            <li>🔥 <strong>NEW: Sub Lead Reasons Matrix</strong> - Individual reason counts (User Busy, Call Back Request, etc.)</li>
+                            <li>🔥 <strong>NEW: Lead × Sub Lead Matrix</strong> - Pivot table with Lead Status in rows and Sub Lead Reasons in columns</li>
                             <li>🔥 <strong>COMPLETE: Campaign Performance Analysis</strong> - 3-Level Hierarchy</li>
                         </ul>
                     </div>
