@@ -147,6 +147,22 @@ st.markdown("""
         padding-left: 2rem;
         font-style: italic;
     }
+    .sub-lead-matrix {
+        font-size: 0.9rem;
+    }
+    .sub-lead-header {
+        background-color: #4a90e2;
+        color: white;
+        padding: 0.5rem;
+        border-radius: 0.3rem;
+        text-align: center;
+    }
+    .sub-lead-row {
+        background-color: #f8f9fa;
+        padding: 0.3rem;
+        border-radius: 0.2rem;
+        margin: 0.1rem 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -763,6 +779,35 @@ def process_contacts_data(contacts):
         # Normalize traffic source
         normalized_traffic_source = normalize_traffic_source(traffic_source)
         
+        # Collect all prospect reasons for Sub Lead Status analysis
+        sub_lead_reasons = []
+        
+        # Combine all reason fields
+        reason_fields = [
+            properties.get("future_prospect_reasons", ""),
+            properties.get("hot_prospect_reason", ""),
+            properties.get("neutral_prospect_reasons", ""),
+            properties.get("not_connected_reasons", ""),
+            properties.get("not_interested_reasons", ""),
+            properties.get("prospect_reasons", ""),
+            properties.get("other_enquiry_reasons", ""),
+            properties.get("contact_reason", ""),
+            properties.get("reason_for_contact", ""),
+            properties.get("enquiry_reason", ""),
+            properties.get("disqualification_reason", ""),
+            properties.get("conversion_reason", "")
+        ]
+        
+        # Process each reason field
+        for reason in reason_fields:
+            if reason and str(reason).strip():
+                mapped_reason = map_prospect_reason(reason)
+                if mapped_reason and mapped_reason not in sub_lead_reasons:
+                    sub_lead_reasons.append(mapped_reason)
+        
+        # Join multiple reasons with comma
+        combined_sub_lead = ", ".join(sub_lead_reasons) if sub_lead_reasons else ""
+        
         # Process each contact
         processed_data.append({
             "ID": contact.get("id", ""),
@@ -780,6 +825,10 @@ def process_contacts_data(contacts):
             
             # 🔥 NORMALIZED LEAD STATUS (CORRECT!)
             "Lead Status": display_lead_status,
+            
+            # 🔥 SUB LEAD STATUS (Combined prospect reasons)
+            "Sub Lead Status": combined_sub_lead,
+            
             "Lifecycle Stage": properties.get("lifecyclestage", ""),
             
             # 🔥 COMPLETE HIERARCHY: CAMPAIGN & TRAFFIC SOURCE DATA
@@ -824,6 +873,7 @@ def process_contacts_data(contacts):
             "Has Traffic Source": 1 if traffic_source else 0,
             "Has Campaign": 1 if campaign_name else 0,
             "Has Drilldown 2": 1 if campaign_drilldown_2 else 0,  # 🔥 NEW
+            "Has Sub Lead": 1 if combined_sub_lead else 0,
             
             # 🔥 STORE RAW VALUE FOR DEBUGGING
             "Lead Status Raw": raw_lead_status
@@ -831,6 +881,65 @@ def process_contacts_data(contacts):
     
     df = pd.DataFrame(processed_data)
     return df
+
+def build_sub_lead_matrix(df):
+    """
+    📊 BUILD SUB LEAD MATRIX (Lead Status × Sub Lead Status)
+    Creates a pivot table with Lead Status in rows and Sub Lead Status in columns
+    """
+    # Keep only records with sub lead info
+    df_with_sub = df[df['Has Sub Lead'] == 1].copy()
+    
+    if df_with_sub.empty:
+        return pd.DataFrame()
+    
+    # Split combined sub lead statuses and explode
+    df_with_sub['Sub Lead Split'] = df_with_sub['Sub Lead Status'].str.split(', ')
+    df_exploded = df_with_sub.explode('Sub Lead Split')
+    
+    # Clean the split values
+    df_exploded['Sub Lead Clean'] = df_exploded['Sub Lead Split'].str.strip()
+    
+    # Remove empty values
+    df_exploded = df_exploded[df_exploded['Sub Lead Clean'] != '']
+    
+    if df_exploded.empty:
+        return pd.DataFrame()
+    
+    # Create pivot table: Lead Status × Sub Lead Status
+    pivot = pd.pivot_table(
+        df_exploded,
+        index='Lead Status',
+        columns='Sub Lead Clean',
+        values='ID',
+        aggfunc='count',
+        fill_value=0
+    )
+    
+    # Reset index to make Lead Status a column
+    pivot = pivot.reset_index()
+    
+    # Rename index column
+    pivot = pivot.rename(columns={'Lead Status': 'Lead Status \\ Sub Lead Status'})
+    
+    # Sort columns alphabetically for better readability
+    column_order = ['Lead Status \\ Sub Lead Status'] + sorted([col for col in pivot.columns if col != 'Lead Status \\ Sub Lead Status'])
+    pivot = pivot[column_order]
+    
+    # Calculate Grand Total per row
+    sub_lead_columns = [col for col in pivot.columns if col != 'Lead Status \\ Sub Lead Status']
+    pivot['Grand Total'] = pivot[sub_lead_columns].sum(axis=1)
+    
+    # Add a Total column at the end
+    total_row = pd.DataFrame(pivot[sub_lead_columns].sum()).T
+    total_row['Lead Status \\ Sub Lead Status'] = 'Grand Total'
+    total_row['Grand Total'] = total_row[sub_lead_columns].sum(axis=1)
+    total_row = total_row[column_order + ['Grand Total']]
+    
+    # Concatenate with original pivot
+    pivot = pd.concat([pivot, total_row], ignore_index=True)
+    
+    return pivot
 
 def build_course_quality_table(df):
     """
@@ -1011,6 +1120,39 @@ def analyze_lead_status_distribution(df):
     
     return lead_status_dist
 
+def analyze_sub_lead_status_distribution(df):
+    """Analyze sub lead status distribution."""
+    if 'Sub Lead Status' not in df.columns:
+        return pd.DataFrame()
+    
+    # Keep only records with sub lead info
+    df_with_sub = df[df['Has Sub Lead'] == 1].copy()
+    
+    if df_with_sub.empty:
+        return pd.DataFrame()
+    
+    # Split combined sub lead statuses and explode
+    df_with_sub['Sub Lead Split'] = df_with_sub['Sub Lead Status'].str.split(', ')
+    df_exploded = df_with_sub.explode('Sub Lead Split')
+    
+    # Clean the split values
+    df_exploded['Sub Lead Clean'] = df_exploded['Sub Lead Split'].str.strip()
+    
+    # Remove empty values
+    df_exploded = df_exploded[df_exploded['Sub Lead Clean'] != '']
+    
+    if df_exploded.empty:
+        return pd.DataFrame()
+    
+    # Count distribution
+    sub_lead_dist = df_exploded['Sub Lead Clean'].value_counts().reset_index()
+    sub_lead_dist.columns = ['Sub Lead Status', 'Count']
+    
+    # Sort by count (descending)
+    sub_lead_dist = sub_lead_dist.sort_values('Count', ascending=False)
+    
+    return sub_lead_dist
+
 def analyze_course_distribution(df):
     """Analyze course/program distribution with count."""
     if 'Course/Program' not in df.columns:
@@ -1110,6 +1252,16 @@ def analyze_contact_data(df):
     if not lead_status_dist.empty:
         analysis['lead_status_distribution'] = lead_status_dist
     
+    # 1b. Sub Lead Status Distribution
+    sub_lead_dist = analyze_sub_lead_status_distribution(df)
+    if not sub_lead_dist.empty:
+        analysis['sub_lead_distribution'] = sub_lead_dist
+    
+    # 1c. 🔥 NEW: Lead Status × Sub Lead Status Matrix
+    sub_lead_matrix = build_sub_lead_matrix(df)
+    if not sub_lead_matrix.empty:
+        analysis['sub_lead_matrix'] = sub_lead_matrix
+    
     # 2. Course Distribution
     course_dist = analyze_course_distribution(df)
     if not course_dist.empty:
@@ -1156,7 +1308,7 @@ def analyze_contact_data(df):
     
     # 9. Contact Completeness Analysis
     completeness_data = {
-        'Field': ['Email', 'Phone', 'Lead Status', 'Course/Program', 'Traffic Source', 'Campaign Name', 'Drill-Down 2'],
+        'Field': ['Email', 'Phone', 'Lead Status', 'Course/Program', 'Traffic Source', 'Campaign Name', 'Drill-Down 2', 'Sub Lead Status'],
         'Count': [
             df['Has Email'].sum(),
             df['Has Phone'].sum(),
@@ -1164,7 +1316,8 @@ def analyze_contact_data(df):
             df['Has Course'].sum(),
             df['Has Traffic Source'].sum(),
             df['Has Campaign'].sum(),
-            df['Has Drilldown 2'].sum()  # 🔥 NEW
+            df['Has Drilldown 2'].sum(),  # 🔥 NEW
+            df['Has Sub Lead'].sum()
         ],
         'Percentage': [
             (df['Has Email'].sum() / len(df)) * 100,
@@ -1173,7 +1326,8 @@ def analyze_contact_data(df):
             (df['Has Course'].sum() / len(df)) * 100,
             (df['Has Traffic Source'].sum() / len(df)) * 100,
             (df['Has Campaign'].sum() / len(df)) * 100,
-            (df['Has Drilldown 2'].sum() / len(df)) * 100  # 🔥 NEW
+            (df['Has Drilldown 2'].sum() / len(df)) * 100,  # 🔥 NEW
+            (df['Has Sub Lead'].sum() / len(df)) * 100
         ]
     }
     analysis['completeness'] = pd.DataFrame(completeness_data)
@@ -1316,6 +1470,21 @@ def create_visualizations(analysis, df):
             fig1.update_layout(xaxis_tickangle=-45)
             visualizations['lead_status_bar'] = fig1
     
+    # 1b. Sub Lead Status Bar Chart
+    if 'sub_lead_distribution' in analysis:
+        sub_lead_data = analysis['sub_lead_distribution'].head(10)
+        if not sub_lead_data.empty:
+            fig1b = px.bar(
+                sub_lead_data,
+                x='Sub Lead Status',
+                y='Count',
+                title='Top 10 Sub Lead Statuses',
+                color='Count',
+                color_continuous_scale='Plasma'
+            )
+            fig1b.update_layout(xaxis_tickangle=-45)
+            visualizations['sub_lead_bar'] = fig1b
+    
     # 2. Course Distribution Bar Chart (Top 10)
     if 'course_distribution' in analysis:
         course_data = analysis['course_distribution'].head(10)
@@ -1422,6 +1591,21 @@ def create_visualizations(analysis, df):
             fig8.update_traces(textposition='inside', textinfo='percent+label')
             visualizations['traffic_source_pie'] = fig8
     
+    # 9. Sub Lead Status Pie Chart
+    if 'sub_lead_distribution' in analysis:
+        sub_lead_data = analysis['sub_lead_distribution'].head(8)
+        if not sub_lead_data.empty:
+            fig9 = px.pie(
+                sub_lead_data,
+                values='Count',
+                names='Sub Lead Status',
+                title='Sub Lead Status Distribution',
+                hole=0.3,
+                color_discrete_sequence=px.colors.qualitative.Bold
+            )
+            fig9.update_traces(textposition='inside', textinfo='percent+label')
+            visualizations['sub_lead_pie'] = fig9
+    
     return visualizations
 
 def main():
@@ -1491,6 +1675,7 @@ def main():
                 • Lead Status & Prospect Reasons<br>
                 • Course/Program Information<br>
                 • <strong>COMPLETE HIERARCHY:</strong> Traffic Source → Campaign → Drill-Down 2<br>
+                • <strong>NEW: Sub Lead Status Matrix</strong> (Lead Status × Prospect Reasons)<br>
                 • Contact details & Analytics<br>
                 • Course Quality Analysis<br>
                 • <strong>3-LEVEL:</strong> Campaign Performance Analysis
@@ -1606,13 +1791,14 @@ def main():
             
             st.divider()
             
-            # Create tabs for different sections
-            tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
-                "📈 Lead Status Distribution", 
+            # Create tabs for different sections (added new tab for Sub Lead Matrix)
+            tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
+                "📈 Lead Status", 
                 "📚 Course Distribution",
-                "🎯 Course Quality Analysis",
-                "📣 COMPLETE Campaign Performance",  # UPDATED NAME
-                "🔍 Analytics Dashboard", 
+                "🎯 Course Quality",
+                "📣 Campaign Performance",
+                "🔍 SUB LEAD MATRIX",  # NEW TAB
+                "📊 Analytics Dashboard", 
                 "🌍 Geographic Analysis", 
                 "📧 Email Validation",
                 "📥 Export Data"
@@ -2282,14 +2468,192 @@ def main():
                 else:
                     st.info("No campaign performance analysis available")
             
-            with tab5:  # Analytics Dashboard
+            with tab5:  # 🔍 SUB LEAD MATRIX (NEW TAB)
+                st.markdown("### 🔍 Sub Lead Status Matrix")
+                st.markdown("*Pivot table showing Lead Status (rows) vs Sub Lead Status (columns)*")
+                
+                if st.session_state.analysis_results and 'sub_lead_matrix' in st.session_state.analysis_results:
+                    sub_lead_matrix = st.session_state.analysis_results['sub_lead_matrix']
+                    
+                    if not sub_lead_matrix.empty:
+                        # Metrics for sub lead data
+                        col_sub1, col_sub2, col_sub3 = st.columns(3)
+                        
+                        with col_sub1:
+                            # Count unique sub lead statuses (excluding first column and Grand Total column)
+                            sub_lead_cols = [col for col in sub_lead_matrix.columns if col not in ['Lead Status \\ Sub Lead Status', 'Grand Total']]
+                            unique_sub_leads = len(sub_lead_cols)
+                            st.metric("Unique Sub Lead Statuses", unique_sub_leads)
+                        
+                        with col_sub2:
+                            # Total contacts with sub lead info (sum of all counts)
+                            total_with_sub = sub_lead_matrix.loc[sub_lead_matrix['Lead Status \\ Sub Lead Status'] != 'Grand Total', 'Grand Total'].sum() if 'Grand Total' in sub_lead_matrix.columns else 0
+                            st.metric("Contacts with Sub Lead", f"{total_with_sub:,}")
+                        
+                        with col_sub3:
+                            # Coverage percentage
+                            total_contacts = len(df)
+                            coverage_pct = (total_with_sub / total_contacts * 100) if total_contacts > 0 else 0
+                            st.metric("Coverage %", f"{coverage_pct:.1f}%")
+                        
+                        st.divider()
+                        
+                        # Display the sub lead matrix
+                        st.markdown("#### Lead Status × Sub Lead Status Matrix")
+                        
+                        # Create a copy for display with formatting
+                        display_sub_df = sub_lead_matrix.copy()
+                        
+                        # Format all numeric columns (except the index column)
+                        for col in display_sub_df.columns:
+                            if col != 'Lead Status \\ Sub Lead Status':
+                                if display_sub_df[col].dtype in ['int64', 'float64']:
+                                    display_sub_df[col] = display_sub_df[col].apply(lambda x: f"{int(x):,}" if pd.notnull(x) and x > 0 else "0")
+                        
+                        # Display the dataframe with proper scrolling
+                        st.dataframe(
+                            display_sub_df,
+                            use_container_width=True,
+                            height=600,
+                            column_config={
+                                "Lead Status \\ Sub Lead Status": st.column_config.TextColumn("Lead Status", width="medium")
+                            }
+                        )
+                        
+                        # Legend and explanation
+                        st.markdown("""
+                        <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; margin-top: 1rem;">
+                            <strong>📊 Matrix Interpretation:</strong>
+                            <ul style="margin-bottom: 0;">
+                                <li><strong>Rows</strong> = Main Lead Status categories</li>
+                                <li><strong>Columns</strong> = Sub Lead Status (prospect reasons)</li>
+                                <li><strong>Values</strong> = Number of contacts with that combination</li>
+                                <li><strong>Grand Total</strong> = Total contacts per Lead Status</li>
+                            </ul>
+                            <p style="margin-top: 0.5rem; margin-bottom: 0; font-size: 0.9rem;">
+                                <strong>Example:</strong> Shows why Warm leads are Warm (e.g., "Interested", "Follow Up") and why Not Interested leads are disqualified (e.g., "Price Issue", "No Requirement")
+                            </p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        # Download and analysis options
+                        st.divider()
+                        col_sub_dl1, col_sub_dl2 = st.columns(2)
+                        
+                        with col_sub_dl1:
+                            csv_sub = sub_lead_matrix.to_csv(index=False)
+                            st.download_button(
+                                "📥 Download Sub Lead Matrix",
+                                csv_sub,
+                                "sub_lead_matrix.csv",
+                                "text/csv",
+                                use_container_width=True
+                            )
+                        
+                        with col_sub_dl2:
+                            # Show top sub lead statuses
+                            if st.button("📊 Show Top Sub Lead Statuses", use_container_width=True):
+                                if 'sub_lead_distribution' in st.session_state.analysis_results:
+                                    st.dataframe(
+                                        st.session_state.analysis_results['sub_lead_distribution'].head(15),
+                                        use_container_width=True
+                                    )
+                        
+                        # Visualization of matrix as heatmap
+                        with st.expander("🔥 View as Heatmap", expanded=False):
+                            # Prepare data for heatmap (exclude Grand Total row and column)
+                            heatmap_data = sub_lead_matrix[sub_lead_matrix['Lead Status \\ Sub Lead Status'] != 'Grand Total'].copy()
+                            
+                            if not heatmap_data.empty:
+                                # Get lead statuses as index
+                                lead_statuses = heatmap_data['Lead Status \\ Sub Lead Status'].values
+                                
+                                # Get sub lead columns (exclude index and Grand Total)
+                                sub_cols = [col for col in heatmap_data.columns if col not in ['Lead Status \\ Sub Lead Status', 'Grand Total']]
+                                
+                                # Create heatmap matrix
+                                heatmap_matrix = heatmap_data[sub_cols].values
+                                
+                                # Create heatmap using plotly
+                                fig_heatmap = go.Figure(data=go.Heatmap(
+                                    z=heatmap_matrix,
+                                    x=sub_cols,
+                                    y=lead_statuses,
+                                    colorscale='Viridis',
+                                    text=heatmap_matrix,
+                                    texttemplate="%{text}",
+                                    textfont={"size": 10},
+                                    hoverongaps=False
+                                ))
+                                
+                                fig_heatmap.update_layout(
+                                    title="Lead Status × Sub Lead Status Heatmap",
+                                    xaxis_title="Sub Lead Status",
+                                    yaxis_title="Lead Status",
+                                    height=500,
+                                    margin=dict(l=100, r=100, t=100, b=100)
+                                )
+                                
+                                st.plotly_chart(fig_heatmap, use_container_width=True)
+                        
+                        # Analysis of common patterns
+                        with st.expander("📈 Pattern Analysis", expanded=False):
+                            if not sub_lead_matrix.empty:
+                                # Find top combinations (excluding Grand Total row)
+                                analysis_data = sub_lead_matrix[sub_lead_matrix['Lead Status \\ Sub Lead Status'] != 'Grand Total'].copy()
+                                
+                                # Melt the dataframe to get combinations
+                                melted = pd.melt(
+                                    analysis_data, 
+                                    id_vars=['Lead Status \\ Sub Lead Status'], 
+                                    var_name='Sub Lead Status',
+                                    value_name='Count'
+                                )
+                                
+                                # Convert Count back to numeric for analysis
+                                melted['Count'] = pd.to_numeric(melted['Count'].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
+                                
+                                # Filter out zero counts and Grand Total column
+                                melted = melted[
+                                    (melted['Count'] > 0) & 
+                                    (melted['Sub Lead Status'] != 'Grand Total')
+                                ]
+                                
+                                if not melted.empty:
+                                    # Top 10 combinations
+                                    top_combinations = melted.sort_values('Count', ascending=False).head(10)
+                                    
+                                    st.markdown("**Top 10 Lead Status × Sub Lead Status Combinations**")
+                                    st.dataframe(top_combinations, use_container_width=True)
+                                    
+                                    # For each lead status, show top sub lead
+                                    st.markdown("**Top Sub Lead per Lead Status**")
+                                    for lead_status in analysis_data['Lead Status \\ Sub Lead Status'].unique():
+                                        status_data = melted[melted['Lead Status \\ Sub Lead Status'] == lead_status]
+                                        if not status_data.empty:
+                                            top_sub = status_data.sort_values('Count', ascending=False).iloc[0]
+                                            st.info(f"**{lead_status}**: Most common sub lead is '{top_sub['Sub Lead Status']}' ({int(top_sub['Count'])} contacts)")
+                    
+                    else:
+                        st.info("No sub lead matrix data available (no contacts with sub lead/prospect reason information)")
+                        
+                        # Show how many contacts have sub lead info
+                        sub_lead_count = df['Has Sub Lead'].sum()
+                        if sub_lead_count > 0:
+                            st.info(f"Found {sub_lead_count} contacts with sub lead information. Matrix will appear after refresh.")
+                        else:
+                            st.warning("No sub lead/prospect reason information found in the contacts data")
+                else:
+                    st.info("No sub lead matrix analysis available")
+            
+            with tab6:  # Analytics Dashboard
                 st.markdown("### 📈 Comprehensive Analytics")
                 
                 if st.session_state.analysis_results and st.session_state.visualizations:
                     analysis = st.session_state.analysis_results
                     visuals = st.session_state.visualizations
                     
-                    # Row 1: Lead Status and Course Distribution
+                    # Row 1: Lead Status and Sub Lead Status
                     col_d1, col_d2 = st.columns(2)
                     
                     with col_d1:
@@ -2297,30 +2661,41 @@ def main():
                             st.plotly_chart(visuals['lead_status_bar'], use_container_width=True)
                     
                     with col_d2:
-                        if 'course_bar' in visuals:
-                            st.plotly_chart(visuals['course_bar'], use_container_width=True)
+                        if 'sub_lead_bar' in visuals:
+                            st.plotly_chart(visuals['sub_lead_bar'], use_container_width=True)
                     
-                    # Row 2: Traffic Source and Country
+                    # Row 2: Course and Traffic Source
                     col_e1, col_e2 = st.columns(2)
                     
                     with col_e1:
+                        if 'course_bar' in visuals:
+                            st.plotly_chart(visuals['course_bar'], use_container_width=True)
+                    
+                    with col_e2:
                         if 'traffic_source_bar' in visuals:
                             st.plotly_chart(visuals['traffic_source_bar'], use_container_width=True)
                     
-                    with col_e2:
-                        if 'country_bar' in visuals:
-                            st.plotly_chart(visuals['country_bar'], use_container_width=True)
-                    
-                    # Row 3: Pie Charts
+                    # Row 3: Country
                     col_f1, col_f2 = st.columns(2)
                     
                     with col_f1:
+                        if 'country_bar' in visuals:
+                            st.plotly_chart(visuals['country_bar'], use_container_width=True)
+                    
+                    with col_f2:
+                        if 'monthly_trend' in visuals:
+                            st.plotly_chart(visuals['monthly_trend'], use_container_width=True)
+                    
+                    # Row 4: Pie Charts
+                    col_g1, col_g2 = st.columns(2)
+                    
+                    with col_g1:
                         if 'lead_status_pie' in visuals:
                             st.plotly_chart(visuals['lead_status_pie'], use_container_width=True)
                     
-                    with col_f2:
-                        if 'traffic_source_pie' in visuals:
-                            st.plotly_chart(visuals['traffic_source_pie'], use_container_width=True)
+                    with col_g2:
+                        if 'sub_lead_pie' in visuals:
+                            st.plotly_chart(visuals['sub_lead_pie'], use_container_width=True)
                     
                     # Data Tables
                     st.markdown("### 📋 Detailed Statistics")
@@ -2347,7 +2722,7 @@ def main():
                         if 'completeness' in analysis:
                             st.dataframe(analysis['completeness'], use_container_width=True, height=300)
             
-            with tab6:  # Geographic Analysis
+            with tab7:  # Geographic Analysis
                 st.markdown("### 🌍 Geographic Distribution")
                 
                 if st.session_state.analysis_results:
@@ -2371,7 +2746,7 @@ def main():
                         # Country data table
                         st.dataframe(country_data, use_container_width=True, height=400)
             
-            with tab7:  # Email Validation
+            with tab8:  # Email Validation
                 st.markdown("### 📧 Email Validation")
                 
                 if st.session_state.email_validation is not None:
@@ -2402,7 +2777,7 @@ def main():
                     else:
                         st.success("✅ All emails appear valid!")
             
-            with tab8:  # Export Data
+            with tab9:  # Export Data
                 st.markdown("### 📥 Export Options")
                 
                 # First row of export buttons
@@ -2463,12 +2838,12 @@ def main():
                             )
                     
                     with export_row2[1]:
-                        if 'course_distribution' in st.session_state.analysis_results:
-                            csv = st.session_state.analysis_results['course_distribution'].to_csv(index=False)
+                        if 'sub_lead_matrix' in st.session_state.analysis_results:
+                            csv = st.session_state.analysis_results['sub_lead_matrix'].to_csv(index=False)
                             st.download_button(
-                                "📚 Courses",
+                                "🔍 Sub Lead Matrix",
                                 csv,
-                                "course_distribution.csv",
+                                "sub_lead_matrix.csv",
                                 "text/csv",
                                 use_container_width=True
                             )
@@ -2504,7 +2879,7 @@ def main():
                 Data last fetched: {datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S")} IST • 
                 <span style='color: #00a86b; font-weight: bold;'>✅ LEAD STATUS NORMALIZATION ACTIVE</span> • 
                 <span style='color: #1a73e8; font-weight: bold;'>📣 3-LEVEL HIERARCHY ENABLED</span> • 
-                <span style='color: #ff6b35; font-weight: bold;'>🎯 DRILL-DOWN 2: hs_analytics_source_data_2</span>
+                <span style='color: #ff6b35; font-weight: bold;'>🎯 SUB LEAD MATRIX ADDED</span>
                 </div>
                 """,
                 unsafe_allow_html=True
@@ -2526,6 +2901,7 @@ def main():
                             <li>✅ <strong>Correct Lead Status Counts</strong> - Old values merged</li>
                             <li>✅ <strong>Course Distribution</strong> with counts</li>
                             <li>✅ <strong>UNLIMITED fetching</strong> - Gets ALL records</li>
+                            <li>🔥 <strong>NEW: Sub Lead Matrix</strong> - Lead Status × Sub Lead Status</li>
                             <li>🔥 <strong>COMPLETE: Campaign Performance Analysis</strong> - 3-Level Hierarchy</li>
                             <li>🔥 <strong>Level 1:</strong> hs_analytics_source (Traffic Source)</li>
                             <li>🔥 <strong>Level 2:</strong> hs_analytics_source_data_1 (Campaign Name)</li>
