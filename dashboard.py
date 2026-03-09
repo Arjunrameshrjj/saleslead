@@ -779,31 +779,39 @@ def process_contacts_data(contacts):
         # Normalize traffic source
         normalized_traffic_source = normalize_traffic_source(traffic_source)
         
-        # Collect all prospect reasons for Sub Lead Status analysis
+        # 🔥 FIXED: Collect all prospect reasons for Sub Lead Status analysis
         sub_lead_reasons = []
         
-        # Combine all reason fields
-        reason_fields = [
-            properties.get("future_prospect_reasons", ""),
-            properties.get("hot_prospect_reason", ""),
-            properties.get("neutral_prospect_reasons", ""),
-            properties.get("not_connected_reasons", ""),
-            properties.get("not_interested_reasons", ""),
-            properties.get("prospect_reasons", ""),
-            properties.get("other_enquiry_reasons", ""),
-            properties.get("contact_reason", ""),
-            properties.get("reason_for_contact", ""),
-            properties.get("enquiry_reason", ""),
-            properties.get("disqualification_reason", ""),
-            properties.get("conversion_reason", "")
+        # Define all possible reason fields with their values
+        reason_field_mappings = [
+            ("future_prospect_reasons", "Future Prospect"),
+            ("hot_prospect_reason", "Hot Prospect"),
+            ("neutral_prospect_reasons", "Neutral Prospect"),
+            ("not_connected_reasons", "Not Connected"),
+            ("not_interested_reasons", "Not Interested"),
+            ("prospect_reasons", "Prospect"),
+            ("other_enquiry_reasons", "Other Enquiry"),
+            ("contact_reason", "Contact"),
+            ("reason_for_contact", "Reason for Contact"),
+            ("enquiry_reason", "Enquiry"),
+            ("disqualification_reason", "Disqualified"),
+            ("conversion_reason", "Conversion")
         ]
         
-        # Process each reason field
-        for reason in reason_fields:
-            if reason and str(reason).strip():
-                mapped_reason = map_prospect_reason(reason)
+        # Check each reason field and add if not empty
+        for field_name, default_label in reason_field_mappings:
+            field_value = properties.get(field_name, "")
+            if field_value and str(field_value).strip():
+                # Map the reason using PROSPECT_REASON_MAP
+                mapped_reason = map_prospect_reason(field_value)
                 if mapped_reason and mapped_reason not in sub_lead_reasons:
                     sub_lead_reasons.append(mapped_reason)
+        
+        # Also check the raw lead status for prospect reasons
+        if raw_lead_status and "prospect" in raw_lead_status.lower():
+            mapped_reason = map_prospect_reason(raw_lead_status)
+            if mapped_reason and mapped_reason not in sub_lead_reasons:
+                sub_lead_reasons.append(mapped_reason)
         
         # Join multiple reasons with comma
         combined_sub_lead = ", ".join(sub_lead_reasons) if sub_lead_reasons else ""
@@ -826,7 +834,7 @@ def process_contacts_data(contacts):
             # 🔥 NORMALIZED LEAD STATUS (CORRECT!)
             "Lead Status": display_lead_status,
             
-            # 🔥 SUB LEAD STATUS (Combined prospect reasons)
+            # 🔥 SUB LEAD STATUS (Combined prospect reasons) - FIXED
             "Sub Lead Status": combined_sub_lead,
             
             "Lifecycle Stage": properties.get("lifecyclestage", ""),
@@ -835,13 +843,13 @@ def process_contacts_data(contacts):
             "Traffic Source": normalized_traffic_source,
             "Traffic Source Raw": traffic_source,
             "Campaign Name": campaign_name,
-            "Campaign Drilldown 2": campaign_drilldown_2,  # 🔥 NEW
+            "Campaign Drilldown 2": campaign_drilldown_2,
             "UTM Source": properties.get("hs_utm_source", ""),
             "UTM Medium": properties.get("hs_utm_medium", ""),
             "UTM Campaign": properties.get("hs_utm_campaign", ""),
             
-            # 🔥 NORMALIZED PROSPECT REASONS (CORRECT!)
-            "Future Prospect Reasons": map_prospect_reason(properties.get("future_prospect_reasons", "") or properties.get("future_prospect_reason", "")),
+            # 🔥 NORMALIZED PROSPECT REASONS (INDIVIDUAL FIELDS)
+            "Future Prospect Reasons": map_prospect_reason(properties.get("future_prospect_reasons", "")),
             "Hot Prospect Reason": map_prospect_reason(properties.get("hot_prospect_reason", "")),
             "Neutral Prospect Reasons": map_prospect_reason(properties.get("neutral_prospect_reasons", "")),
             "Not Connected Reasons": map_prospect_reason(properties.get("not_connected_reasons", "")),
@@ -872,11 +880,12 @@ def process_contacts_data(contacts):
             "Has Course": 1 if course_info else 0,
             "Has Traffic Source": 1 if traffic_source else 0,
             "Has Campaign": 1 if campaign_name else 0,
-            "Has Drilldown 2": 1 if campaign_drilldown_2 else 0,  # 🔥 NEW
-            "Has Sub Lead": 1 if combined_sub_lead else 0,
+            "Has Drilldown 2": 1 if campaign_drilldown_2 else 0,
+            "Has Sub Lead": 1 if combined_sub_lead else 0,  # 🔥 FIXED: Will be 1 when reasons exist
             
             # 🔥 STORE RAW VALUE FOR DEBUGGING
-            "Lead Status Raw": raw_lead_status
+            "Lead Status Raw": raw_lead_status,
+            "All Reason Fields": str([properties.get(f, "") for f, _ in reason_field_mappings])  # Debug
         })
     
     df = pd.DataFrame(processed_data)
@@ -892,6 +901,21 @@ def build_sub_lead_matrix(df):
     df_with_sub = df[df['Has Sub Lead'] == 1].copy()
     
     if df_with_sub.empty:
+        # Debug: Show why no sub lead data
+        st.sidebar.markdown("### 🔍 Debug Info")
+        st.sidebar.write(f"Total contacts: {len(df)}")
+        st.sidebar.write(f"Contacts with Has Sub Lead=1: {df['Has Sub Lead'].sum() if 'Has Sub Lead' in df.columns else 0}")
+        
+        # Check if Sub Lead Status column has any non-empty values
+        if 'Sub Lead Status' in df.columns:
+            non_empty = df['Sub Lead Status'].str.len() > 0
+            st.sidebar.write(f"Contacts with non-empty Sub Lead Status: {non_empty.sum() if not non_empty.empty else 0}")
+            
+            # Show sample of Sub Lead Status values
+            if non_empty.any():
+                st.sidebar.write("Sample Sub Lead Status values:")
+                st.sidebar.write(df[non_empty]['Sub Lead Status'].head(3).tolist())
+        
         return pd.DataFrame()
     
     # Split combined sub lead statuses and explode to get one row per sub lead
@@ -2449,6 +2473,19 @@ def main():
                 st.markdown("### 🔍 Sub Lead Status Matrix")
                 st.markdown("*Pivot table showing Lead Status (rows) vs Count of Sub Lead Status - Excel format*")
                 
+                # Debug info in sidebar
+                with st.sidebar.expander("🔍 Sub Lead Debug Info", expanded=False):
+                    if 'contacts_df' in st.session_state and st.session_state.contacts_df is not None:
+                        df_debug = st.session_state.contacts_df
+                        st.write(f"Total contacts: {len(df_debug)}")
+                        st.write(f"Has Sub Lead flag: {df_debug['Has Sub Lead'].sum() if 'Has Sub Lead' in df_debug.columns else 'N/A'}")
+                        if 'Sub Lead Status' in df_debug.columns:
+                            non_empty = df_debug['Sub Lead Status'].str.len() > 0
+                            st.write(f"Non-empty Sub Lead Status: {non_empty.sum()}")
+                            if non_empty.any():
+                                st.write("Sample values:")
+                                st.write(df_debug[non_empty]['Sub Lead Status'].head(5).tolist())
+                
                 if st.session_state.analysis_results and 'sub_lead_matrix' in st.session_state.analysis_results:
                     sub_lead_matrix = st.session_state.analysis_results['sub_lead_matrix']
                     
@@ -2551,11 +2588,17 @@ def main():
                         st.info("No sub lead matrix data available (no contacts with sub lead/prospect reason information)")
                         
                         # Show how many contacts have sub lead info
-                        sub_lead_count = df['Has Sub Lead'].sum()
+                        sub_lead_count = df['Has Sub Lead'].sum() if 'Has Sub Lead' in df.columns else 0
                         if sub_lead_count > 0:
                             st.info(f"Found {sub_lead_count} contacts with sub lead information. Matrix will appear after refresh.")
                         else:
                             st.warning("No sub lead/prospect reason information found in the contacts data")
+                            
+                            # Show sample of raw data to debug
+                            with st.expander("🔍 Debug: View Sample Data"):
+                                if 'Sub Lead Status' in df.columns:
+                                    st.write("Sample of Sub Lead Status column:")
+                                    st.write(df[['Lead Status', 'Sub Lead Status']].head(10))
                 else:
                     st.info("No sub lead matrix analysis available")
             
