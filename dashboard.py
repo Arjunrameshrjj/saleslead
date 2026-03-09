@@ -226,57 +226,40 @@ LEAD_STATUS_MAP = {
     "other": "Unknown"
 }
 
-# 🔥 PROSPECT REASONS MAPPING (FORCE MERGE)
-PROSPECT_REASON_MAP = {
-    # 🔥 HOT STATUS MAPPING
+# 🔥 PROSPECT REASONS MAPPING - MODIFIED TO PRESERVE ORIGINAL NAMES
+# This is now only for categorizing, not for renaming
+PROSPECT_REASON_CATEGORIES = {
+    # Hot reasons
     "hot_prospect": "Hot",
-    "hot": "Hot",
     "urgent": "Hot",
     
-    # 🔥 WARM STATUS MAPPING  
+    # Warm reasons
     "warm_prospect": "Warm",
-    "prospect": "Warm",
     "interested": "Warm",
     "follow_up": "Warm",
     
-    # 🔥 COLD STATUS MAPPING
-    "cold_prospect": "Cold", 
+    # Cold reasons
+    "cold_prospect": "Cold",
     "neutral_prospect": "Cold",
-    "neutral": "Cold",
     "future_prospect": "Cold",
     
-    # ❌ DISQUALIFIED REASONS
+    # Disqualified reasons
     "not_connected": "Not Connected",
     "not_interested": "Not Interested",
-    "no_interest": "Not Interested",
     "unqualified": "Not Qualified",
     "not_qualified": "Not Qualified",
     
-    # 📞 CONTACT REASONS
+    # Contact reasons
     "call_back_later": "Call Back Later",
     "callback": "Call Back Later",
-    "follow_up_later": "Call Back Later",
     
-    # 💰 PRICE/BUDGET
+    # Price reasons
     "price_issue": "Price Issue",
     "budget_issue": "Budget Issue",
-    "too_expensive": "Price Issue",
     
-    # 🏢 BUSINESS REASONS
+    # Business reasons
     "no_requirement": "No Requirement",
-    "no_need": "No Requirement",
-    "competitor": "Competitor",
-    "using_competitor": "Competitor",
-    
-    # 📋 GENERAL
-    "demo_requested": "Demo Requested",
-    "quote_requested": "Quote Requested",
-    "info_requested": "Information Requested",
-    "trial_requested": "Trial Requested",
-    
-    # Fallback: Clean up any remaining values
-    "": "",
-    None: ""
+    "competitor": "Competitor"
 }
 
 # 🔥 TRAFFIC SOURCE CATEGORIZATION
@@ -687,24 +670,69 @@ def normalize_traffic_source(raw_source):
     # Return cleaned version
     return source_str.title()
 
-def map_prospect_reason(reason):
-    """Map prospect reason with aggressive cleaning"""
+def clean_reason_text(reason):
+    """Clean up reason text without mapping to categories"""
     if not reason:
         return ""
     
-    reason_str = str(reason).strip().lower()
+    reason_str = str(reason).strip()
     
-    # First, check exact match
-    if reason_str in PROSPECT_REASON_MAP:
-        return PROSPECT_REASON_MAP[reason_str]
+    # Just clean up formatting, don't map to categories
+    cleaned = reason_str.replace("_", " ").replace("-", " ").title()
     
-    # Check for partial matches
-    for key, value in PROSPECT_REASON_MAP.items():
-        if key in reason_str:
+    # Common specific mappings that preserve the original meaning
+    special_mappings = {
+        "call_back_later": "Call Back Later",
+        "call back later": "Call Back Later",
+        "callback": "Call Back Later",
+        "not_connected": "Not Connected",
+        "not connected": "Not Connected",
+        "not_interested": "Not Interested",
+        "not interested": "Not Interested",
+        "not_qualified": "Not Qualified",
+        "not qualified": "Not Qualified",
+        "no_requirement": "No Requirement",
+        "no requirement": "No Requirement",
+        "price_issue": "Price Issue",
+        "price issue": "Price Issue",
+        "budget_issue": "Budget Issue",
+        "budget issue": "Budget Issue",
+        "future_prospect": "Future Prospect",
+        "future prospect": "Future Prospect",
+        "neutral_prospect": "Neutral Prospect",
+        "neutral prospect": "Neutral Prospect",
+        "hot_prospect": "Hot Prospect",
+        "hot prospect": "Hot Prospect",
+        "warm_prospect": "Warm Prospect",
+        "warm prospect": "Warm Prospect",
+        "cold_prospect": "Cold Prospect",
+        "cold prospect": "Cold Prospect",
+        "wrong_course": "Wrong Course Enquiry",
+        "wrong course": "Wrong Course Enquiry",
+        "casual_enquiry": "Casual Enquiry",
+        "casual enquiry": "Casual Enquiry",
+        "connected_unknowingly": "Connected Unknowingly",
+        "connected unknowingly": "Connected Unknowingly",
+        "out_of_coverage": "Out of Coverage",
+        "out of coverage": "Out of Coverage",
+        "not_answering": "Not Answering",
+        "not answering": "Not Answering",
+        "user_busy": "User Busy",
+        "user busy": "User Busy",
+        "disconnected_by_user": "Disconnected by User",
+        "disconnected by user": "Disconnected by User",
+        "hr_calls": "HR Calls",
+        "hr calls": "HR Calls",
+        "other_reasons": "Other Reasons",
+        "other reasons": "Other Reasons"
+    }
+    
+    # Check for special mappings first
+    reason_lower = reason_str.lower()
+    for key, value in special_mappings.items():
+        if key in reason_lower:
             return value
     
-    # Clean up special characters and format
-    cleaned = reason_str.replace("_", " ").replace("-", " ").title()
     return cleaned
 
 def process_contacts_data(contacts):
@@ -779,39 +807,40 @@ def process_contacts_data(contacts):
         # Normalize traffic source
         normalized_traffic_source = normalize_traffic_source(traffic_source)
         
-        # 🔥 FIXED: Collect all prospect reasons for Sub Lead Status analysis
+        # 🔥 FIXED: Collect all prospect reasons preserving original names
         sub_lead_reasons = []
         
-        # Define all possible reason fields with their values
-        reason_field_mappings = [
-            ("future_prospect_reasons", "Future Prospect"),
-            ("hot_prospect_reason", "Hot Prospect"),
-            ("neutral_prospect_reasons", "Neutral Prospect"),
-            ("not_connected_reasons", "Not Connected"),
-            ("not_interested_reasons", "Not Interested"),
-            ("prospect_reasons", "Prospect"),
-            ("other_enquiry_reasons", "Other Enquiry"),
-            ("contact_reason", "Contact"),
-            ("reason_for_contact", "Reason for Contact"),
-            ("enquiry_reason", "Enquiry"),
-            ("disqualification_reason", "Disqualified"),
-            ("conversion_reason", "Conversion")
+        # Define all possible reason fields
+        reason_fields = [
+            "future_prospect_reasons",
+            "hot_prospect_reason", 
+            "neutral_prospect_reasons",
+            "not_connected_reasons",
+            "not_interested_reasons",
+            "prospect_reasons",
+            "other_enquiry_reasons",
+            "contact_reason",
+            "reason_for_contact",
+            "enquiry_reason",
+            "disqualification_reason",
+            "conversion_reason"
         ]
         
-        # Check each reason field and add if not empty
-        for field_name, default_label in reason_field_mappings:
+        # Check each reason field and add if not empty (preserving original values)
+        for field_name in reason_fields:
             field_value = properties.get(field_name, "")
             if field_value and str(field_value).strip():
-                # Map the reason using PROSPECT_REASON_MAP
-                mapped_reason = map_prospect_reason(field_value)
-                if mapped_reason and mapped_reason not in sub_lead_reasons:
-                    sub_lead_reasons.append(mapped_reason)
+                # Clean the reason text but don't map to categories
+                cleaned_reason = clean_reason_text(field_value)
+                if cleaned_reason and cleaned_reason not in sub_lead_reasons:
+                    sub_lead_reasons.append(cleaned_reason)
         
-        # Also check the raw lead status for prospect reasons
-        if raw_lead_status and "prospect" in raw_lead_status.lower():
-            mapped_reason = map_prospect_reason(raw_lead_status)
-            if mapped_reason and mapped_reason not in sub_lead_reasons:
-                sub_lead_reasons.append(mapped_reason)
+        # Also check lead_status field for reasons
+        lead_status_value = properties.get("lead_status", "")
+        if lead_status_value and str(lead_status_value).strip() and "prospect" in lead_status_value.lower():
+            cleaned_reason = clean_reason_text(lead_status_value)
+            if cleaned_reason and cleaned_reason not in sub_lead_reasons:
+                sub_lead_reasons.append(cleaned_reason)
         
         # Join multiple reasons with comma
         combined_sub_lead = ", ".join(sub_lead_reasons) if sub_lead_reasons else ""
@@ -834,7 +863,7 @@ def process_contacts_data(contacts):
             # 🔥 NORMALIZED LEAD STATUS (CORRECT!)
             "Lead Status": display_lead_status,
             
-            # 🔥 SUB LEAD STATUS (Combined prospect reasons) - FIXED
+            # 🔥 SUB LEAD STATUS (Combined prospect reasons) - NOW WITH ORIGINAL NAMES
             "Sub Lead Status": combined_sub_lead,
             
             "Lifecycle Stage": properties.get("lifecyclestage", ""),
@@ -847,22 +876,6 @@ def process_contacts_data(contacts):
             "UTM Source": properties.get("hs_utm_source", ""),
             "UTM Medium": properties.get("hs_utm_medium", ""),
             "UTM Campaign": properties.get("hs_utm_campaign", ""),
-            
-            # 🔥 NORMALIZED PROSPECT REASONS (INDIVIDUAL FIELDS)
-            "Future Prospect Reasons": map_prospect_reason(properties.get("future_prospect_reasons", "")),
-            "Hot Prospect Reason": map_prospect_reason(properties.get("hot_prospect_reason", "")),
-            "Neutral Prospect Reasons": map_prospect_reason(properties.get("neutral_prospect_reasons", "")),
-            "Not Connected Reasons": map_prospect_reason(properties.get("not_connected_reasons", "")),
-            "Not Interested Reasons": map_prospect_reason(properties.get("not_interested_reasons", "")),
-            "Other Enquiry Reasons": map_prospect_reason(properties.get("other_enquiry_reasons", "")),
-            "Prospect Reasons": map_prospect_reason(properties.get("prospect_reasons", "")),
-            
-            # Additional reason fields
-            "Contact Reason": map_prospect_reason(properties.get("contact_reason", "")),
-            "Reason for Contact": map_prospect_reason(properties.get("reason_for_contact", "")),
-            "Enquiry Reason": map_prospect_reason(properties.get("enquiry_reason", "")),
-            "Disqualification Reason": map_prospect_reason(properties.get("disqualification_reason", "")),
-            "Conversion Reason": map_prospect_reason(properties.get("conversion_reason", "")),
             
             # Other contact info
             "Country": properties.get("country", ""),
@@ -881,11 +894,10 @@ def process_contacts_data(contacts):
             "Has Traffic Source": 1 if traffic_source else 0,
             "Has Campaign": 1 if campaign_name else 0,
             "Has Drilldown 2": 1 if campaign_drilldown_2 else 0,
-            "Has Sub Lead": 1 if combined_sub_lead else 0,  # 🔥 FIXED: Will be 1 when reasons exist
+            "Has Sub Lead": 1 if combined_sub_lead else 0,
             
             # 🔥 STORE RAW VALUE FOR DEBUGGING
-            "Lead Status Raw": raw_lead_status,
-            "All Reason Fields": str([properties.get(f, "") for f, _ in reason_field_mappings])  # Debug
+            "Lead Status Raw": raw_lead_status
         })
     
     df = pd.DataFrame(processed_data)
@@ -1112,7 +1124,7 @@ def analyze_lead_status_distribution(df):
     return lead_status_dist
 
 def analyze_sub_lead_status_distribution(df):
-    """Analyze sub lead status distribution."""
+    """Analyze sub lead status distribution - shows individual reason counts."""
     if 'Sub Lead Status' not in df.columns:
         return pd.DataFrame()
     
@@ -1135,7 +1147,7 @@ def analyze_sub_lead_status_distribution(df):
     if df_exploded.empty:
         return pd.DataFrame()
     
-    # Count distribution
+    # Count distribution of individual reasons
     sub_lead_dist = df_exploded['Sub Lead Clean'].value_counts().reset_index()
     sub_lead_dist.columns = ['Sub Lead Status', 'Count']
     
@@ -1192,7 +1204,7 @@ def analyze_traffic_source_distribution(df):
     return traffic_dist
 
 def analyze_prospect_reasons(df):
-    """Analyze all prospect reasons - with CORRECT mapping."""
+    """Analyze all prospect reasons - preserving original names."""
     # Define all prospect reason columns
     prospect_columns = [
         'Future Prospect Reasons',
@@ -1469,7 +1481,7 @@ def create_visualizations(analysis, df):
                 sub_lead_data,
                 x='Sub Lead Status',
                 y='Count',
-                title='Top 10 Sub Lead Statuses (Reasons)',
+                title='Top 10 Sub Lead Reasons',
                 color='Count',
                 color_continuous_scale='Plasma'
             )
@@ -1590,7 +1602,7 @@ def create_visualizations(analysis, df):
                 sub_lead_data,
                 values='Count',
                 names='Sub Lead Status',
-                title='Sub Lead Status Distribution (Reasons)',
+                title='Sub Lead Reasons Distribution',
                 hole=0.3,
                 color_discrete_sequence=px.colors.qualitative.Bold
             )
@@ -1666,7 +1678,7 @@ def main():
                 • Lead Status & Prospect Reasons<br>
                 • Course/Program Information<br>
                 • <strong>COMPLETE HIERARCHY:</strong> Traffic Source → Campaign → Drill-Down 2<br>
-                • <strong>NEW: Sub Lead Reasons Matrix</strong> (Excel format: Reasons × Count)<br>
+                • <strong>NEW: Sub Lead Reasons Matrix</strong> (Excel format: Individual reason counts)<br>
                 • Contact details & Analytics<br>
                 • Course Quality Analysis<br>
                 • <strong>3-LEVEL:</strong> Campaign Performance Analysis
@@ -2546,7 +2558,7 @@ def main():
                 Data last fetched: {datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S")} IST • 
                 <span style='color: #00a86b; font-weight: bold;'>✅ LEAD STATUS NORMALIZATION ACTIVE</span> • 
                 <span style='color: #1a73e8; font-weight: bold;'>📣 3-LEVEL HIERARCHY ENABLED</span> • 
-                <span style='color: #ff6b35; font-weight: bold;'>🎯 SUB LEAD REASONS MATRIX (EXCEL FORMAT)</span>
+                <span style='color: #ff6b35; font-weight: bold;'>🎯 SUB LEAD REASONS MATRIX (INDIVIDUAL REASONS)</span>
                 </div>
                 """,
                 unsafe_allow_html=True
@@ -2568,7 +2580,7 @@ def main():
                             <li>✅ <strong>Correct Lead Status Counts</strong> - Old values merged</li>
                             <li>✅ <strong>Course Distribution</strong> with counts</li>
                             <li>✅ <strong>UNLIMITED fetching</strong> - Gets ALL records</li>
-                            <li>🔥 <strong>NEW: Sub Lead Reasons Matrix</strong> - Excel format (Reasons × Count)</li>
+                            <li>🔥 <strong>NEW: Sub Lead Reasons Matrix</strong> - Individual reason counts (User Busy, Call Back Request, etc.)</li>
                             <li>🔥 <strong>COMPLETE: Campaign Performance Analysis</strong> - 3-Level Hierarchy</li>
                         </ul>
                     </div>
