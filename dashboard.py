@@ -1782,16 +1782,16 @@ def main():
                         unique_dd2 = sorted(df['Campaign Drilldown 2'].dropna().unique()) if 'Campaign Drilldown 2' in df.columns else []
                         
                         with col_f1:
-                            selected_source = st.selectbox("Traffic Source:", ["All"] + list(unique_sources), key="ls_traffic_source")
+                            selected_sources = st.multiselect("Traffic Source:", unique_sources, default=[], key="ls_traffic_source")
                         with col_f2:
-                            selected_dd2 = st.selectbox("Drill-Down 2:", ["All"] + list(unique_dd2), key="ls_drilldown_2")
+                            selected_dd2s = st.multiselect("Drill-Down 2:", unique_dd2, default=[], key="ls_drilldown_2")
                         
                         # Filter dataframe based on selections
                         filtered_df = df.copy()
-                        if selected_source != "All":
-                            filtered_df = filtered_df[filtered_df['Traffic Source'] == selected_source]
-                        if selected_dd2 != "All":
-                            filtered_df = filtered_df[filtered_df['Campaign Drilldown 2'] == selected_dd2]
+                        if selected_sources:
+                            filtered_df = filtered_df[filtered_df['Traffic Source'].isin(selected_sources)]
+                        if selected_dd2s:
+                            filtered_df = filtered_df[filtered_df['Campaign Drilldown 2'].isin(selected_dd2s)]
                         
                         # Re-calculate status and sub-status counts based on filtered data
                         # We need to re-run the aggregation logic on the filtered dataframe
@@ -2111,40 +2111,41 @@ def main():
                         with col_filter1:
                             # Traffic Source Filter
                             unique_sources = sorted(campaign_df['Traffic Source'].unique())
-                            selected_source = st.selectbox(
+                            selected_sources = st.multiselect(
                                 "Traffic Source:",
-                                ["All Traffic Sources"] + list(unique_sources),
+                                unique_sources,
+                                default=[],
                                 key="traffic_source_filter"
                             )
                         
                         with col_filter2:
                             # Campaign Name Filter
-                            if selected_source != "All Traffic Sources":
-                                source_campaigns = sorted(campaign_df[campaign_df['Traffic Source'] == selected_source]['Campaign Name'].unique())
+                            if selected_sources:
+                                source_campaigns = sorted(campaign_df[campaign_df['Traffic Source'].isin(selected_sources)]['Campaign Name'].unique())
                             else:
                                 source_campaigns = sorted(campaign_df['Campaign Name'].unique())
                             
-                            selected_campaign = st.selectbox(
+                            selected_campaigns = st.multiselect(
                                 "Campaign Name:",
-                                ["All Campaigns"] + list(source_campaigns),
+                                source_campaigns,
+                                default=[],
                                 key="campaign_filter"
                             )
                         
                         with col_filter3:
                             # 🔥 Drill-Down 2 Filter
-                            if selected_source != "All Traffic Sources" and selected_campaign != "All Campaigns":
-                                source_campaign_dd2 = sorted(campaign_df[
-                                    (campaign_df['Traffic Source'] == selected_source) & 
-                                    (campaign_df['Campaign Name'] == selected_campaign)
-                                ]['Campaign Drilldown 2'].unique())
-                            elif selected_source != "All Traffic Sources":
-                                source_campaign_dd2 = sorted(campaign_df[campaign_df['Traffic Source'] == selected_source]['Campaign Drilldown 2'].unique())
-                            else:
-                                source_campaign_dd2 = sorted(campaign_df['Campaign Drilldown 2'].unique())
+                            temp_df = campaign_df.copy()
+                            if selected_sources:
+                                temp_df = temp_df[temp_df['Traffic Source'].isin(selected_sources)]
+                            if selected_campaigns:
+                                temp_df = temp_df[temp_df['Campaign Name'].isin(selected_campaigns)]
                             
-                            selected_dd2 = st.selectbox(
+                            source_campaign_dd2 = sorted(temp_df['Campaign Drilldown 2'].unique())
+                            
+                            selected_dd2s = st.multiselect(
                                 "Drill-Down 2:",
-                                ["All Drill-Down 2"] + list(source_campaign_dd2),
+                                source_campaign_dd2,
+                                default=[],
                                 key="drilldown2_filter"
                             )
                         
@@ -2152,17 +2153,17 @@ def main():
                         filtered_df = campaign_df.copy()
                         filter_messages = []
                         
-                        if selected_source != "All Traffic Sources":
-                            filtered_df = filtered_df[filtered_df['Traffic Source'] == selected_source]
-                            filter_messages.append(f"Traffic Source: {selected_source}")
+                        if selected_sources:
+                            filtered_df = filtered_df[filtered_df['Traffic Source'].isin(selected_sources)]
+                            filter_messages.append(f"Traffic Sources: {', '.join(selected_sources)}")
                         
-                        if selected_campaign != "All Campaigns":
-                            filtered_df = filtered_df[filtered_df['Campaign Name'] == selected_campaign]
-                            filter_messages.append(f"Campaign: {selected_campaign}")
+                        if selected_campaigns:
+                            filtered_df = filtered_df[filtered_df['Campaign Name'].isin(selected_campaigns)]
+                            filter_messages.append(f"Campaigns: {', '.join(selected_campaigns)}")
                         
-                        if selected_dd2 != "All Drill-Down 2":
-                            filtered_df = filtered_df[filtered_df['Campaign Drilldown 2'] == selected_dd2]
-                            filter_messages.append(f"Drill-Down 2: {selected_dd2}")
+                        if selected_dd2s:
+                            filtered_df = filtered_df[filtered_df['Campaign Drilldown 2'].isin(selected_dd2s)]
+                            filter_messages.append(f"Drill-Down 2s: {', '.join(selected_dd2s)}")
                         
                         # Show filter summary
                         if filter_messages:
