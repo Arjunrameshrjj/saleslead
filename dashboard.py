@@ -22,132 +22,213 @@ st.set_page_config(
 # Custom CSS for better styling
 st.markdown("""
 <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif;
+    }
     .main-header {
-        font-size: 2.5rem;
-        color: #1a1a1a;
-        margin-bottom: 1rem;
+        font-size: 2.8rem;
+        font-weight: 700;
+        color: #111827;
+        margin-bottom: 0.5rem;
+        letter-spacing: -0.02em;
     }
     .sub-header {
-        font-size: 1.5rem;
-        color: #666;
-        margin-bottom: 1rem;
+        font-size: 1.2rem;
+        color: #6b7280;
+        margin-bottom: 2rem;
+        font-weight: 500;
     }
     .stats-card {
-        background-color: #f8f9fa;
-        padding: 1rem;
-        border-radius: 0.5rem;
+        background: rgba(255, 255, 255, 0.9);
+        backdrop-filter: blur(10px);
+        padding: 1.5rem;
+        border-radius: 1rem;
+        border: 1px solid rgba(255, 122, 89, 0.2);
         border-left: 4px solid #ff7a59;
-        margin-bottom: 1rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .stats-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
     }
     .date-info {
-        background-color: #e8f4fd;
-        padding: 0.5rem;
-        border-radius: 0.3rem;
-        font-size: 0.9rem;
+        background-color: #f3f4f6;
+        padding: 0.75rem 1rem;
+        border-radius: 0.5rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #4b5563;
         margin: 0.5rem 0;
+        border: 1px solid #e5e7eb;
     }
     .success-box {
-        background-color: #d4edda;
-        color: #155724;
-        padding: 1rem;
-        border-radius: 0.5rem;
+        background-color: #ecfdf5;
+        color: #065f46;
+        padding: 1rem 1.5rem;
+        border-radius: 0.75rem;
         margin: 1rem 0;
+        border: 1px solid #d1fae5;
+        font-weight: 500;
     }
     .error-box {
-        background-color: #f8d7da;
-        color: #721c24;
-        padding: 1rem;
-        border-radius: 0.5rem;
+        background-color: #fef2f2;
+        color: #991b1b;
+        padding: 1rem 1.5rem;
+        border-radius: 0.75rem;
         margin: 1rem 0;
+        border: 1px solid #fee2e2;
+        font-weight: 500;
     }
     .metric-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 1.5rem;
-        border-radius: 0.5rem;
+        background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+        padding: 2rem;
+        border-radius: 1rem;
         color: white;
         text-align: center;
+        box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.3);
+        transition: transform 0.2s ease;
+    }
+    .metric-card:hover {
+        transform: translateY(-2px);
     }
     .header-container {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 2rem;
-        border-radius: 0.5rem;
+        background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+        padding: 3rem 2rem;
+        border-radius: 1rem;
         color: white;
-        margin-bottom: 2rem;
+        margin-bottom: 2.5rem;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        position: relative;
+        overflow: hidden;
+    }
+    .header-container::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        background: linear-gradient(45deg, transparent 40%, rgba(255,255,255,0.1) 50%, transparent 60%);
+        background-size: 200% 200%;
+        animation: shimmer 3s infinite linear;
+    }
+    @keyframes shimmer {
+        0% { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
     }
     .warning-box {
-        background-color: #fff3cd;
-        color: #856404;
-        padding: 1rem;
-        border-radius: 0.5rem;
+        background-color: #fffbeb;
+        color: #92400e;
+        padding: 1rem 1.5rem;
+        border-radius: 0.75rem;
         margin: 1rem 0;
-        border: 1px solid #ffeaa7;
+        border: 1px solid #fef3c7;
+        font-weight: 500;
     }
     .reason-tab {
-        background-color: #f8f9fa;
-        padding: 0.5rem;
-        border-radius: 0.3rem;
+        background-color: #f3f4f6;
+        padding: 0.5rem 0.75rem;
+        border-radius: 0.5rem;
         margin: 0.2rem 0;
+        font-size: 0.875rem;
+        color: #374151;
     }
     .course-badge {
-        background-color: #e3f2fd;
-        color: #1565c0;
-        padding: 0.3rem 0.8rem;
-        border-radius: 1rem;
-        font-size: 0.9rem;
+        background-color: #eff6ff;
+        color: #1d4ed8;
+        padding: 0.4rem 1rem;
+        border-radius: 9999px;
+        font-size: 0.875rem;
+        font-weight: 600;
         display: inline-block;
         margin: 0.2rem;
+        border: 1px solid #bfdbfe;
     }
     .quality-high-red {
-        background-color: #f8d7da !important;
-        color: #721c24 !important;
-        font-weight: bold;
+        background-color: #fef2f2 !important;
+        color: #991b1b !important;
+        font-weight: 600;
     }
     .quality-high-green {
-        background-color: #d4edda !important;
-        color: #155724 !important;
-        font-weight: bold;
+        background-color: #ecfdf5 !important;
+        color: #065f46 !important;
+        font-weight: 600;
     }
     .campaign-good {
-        background-color: #d4edda !important;
-        color: #155724 !important;
+        background-color: #ecfdf5 !important;
+        color: #065f46 !important;
+        font-weight: 500;
+        padding: 0.2rem 0.5rem;
+        border-radius: 0.25rem;
     }
     .campaign-bad {
-        background-color: #f8d7da !important;
-        color: #721c24 !important;
+        background-color: #fef2f2 !important;
+        color: #991b1b !important;
+        font-weight: 500;
+        padding: 0.2rem 0.5rem;
+        border-radius: 0.25rem;
     }
     .traffic-badge {
-        background-color: #e3f2fd;
-        color: #1565c0;
-        padding: 0.2rem 0.6rem;
-        border-radius: 0.8rem;
+        background-color: #f5f3ff;
+        color: #5b21b6;
+        padding: 0.3rem 0.8rem;
+        border-radius: 9999px;
         font-size: 0.8rem;
+        font-weight: 600;
         display: inline-block;
-        margin: 0.1rem;
+        margin: 0.15rem;
+        border: 1px solid #ede9fe;
     }
     .drilldown-badge {
-        background-color: #fff3cd;
-        color: #856404;
-        padding: 0.2rem 0.6rem;
-        border-radius: 0.8rem;
+        background-color: #fffbeb;
+        color: #92400e;
+        padding: 0.3rem 0.8rem;
+        border-radius: 9999px;
         font-size: 0.8rem;
+        font-weight: 600;
         display: inline-block;
-        margin: 0.1rem;
+        margin: 0.15rem;
+        border: 1px solid #fef3c7;
     }
     .hierarchy-level-1 {
-        font-weight: bold;
-        color: #1a73e8;
+        font-weight: 700;
+        color: #2563eb;
     }
     .hierarchy-level-2 {
-        font-weight: bold;
-        color: #ff6b35;
+        font-weight: 600;
+        color: #ea580c;
         padding-left: 1rem;
     }
     .hierarchy-level-3 {
-        color: #34a853;
+        color: #16a34a;
         padding-left: 2rem;
         font-style: italic;
+        font-weight: 500;
+    }
+    /* Streamlit specific overrides */
+    div[data-testid="stMetricValue"] {
+        font-size: 2.2rem !important;
+        font-weight: 700 !important;
+    }
+    div[data-testid="stMetricLabel"] {
+        font-size: 1rem !important;
+        color: #6b7280 !important;
+        font-weight: 600 !important;
+    }
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 1rem;
+    }
+    .stTabs [data-baseweb="tab"] {
+        padding: 0.75rem 1rem;
+        border-radius: 0.5rem 0.5rem 0 0;
+        font-weight: 600;
     }
 </style>
+
 """, unsafe_allow_html=True)
 
 # Constants
@@ -209,6 +290,22 @@ LEAD_STATUS_MAP = {
     "unknown": "Unknown",
     "other": "Unknown"
 }
+
+# 🔥 LOGICAL FUNNEL ORDER FOR SORTING
+LEAD_STATUS_ORDER = [
+    "New Lead",
+    "Hot",
+    "Warm",
+    "Cold",
+    "Not Connected (NC)",
+    "Not Interested",
+    "Not Qualified",
+    "Customer",
+    "Upselling",
+    "Course Shifting",
+    "Duplicate",
+    "Unknown"
+]
 
 # 🔥 PROSPECT REASONS MAPPING (FORCE MERGE)
 PROSPECT_REASON_MAP = {
@@ -492,7 +589,7 @@ def fetch_hubspot_contacts_with_date_filter(api_key, date_field, start_date, end
         "createdate", "lastmodifieddate", "hs_object_id",
         "company", "jobtitle", "country", "state", "city",
         "industry", "annualrevenue", "numemployees",
-        "website", "mobilephone", "address"
+        "website", "mobilephone", "address", "amount"
     ]
     
     try:
@@ -732,6 +829,17 @@ def process_contacts_data(contacts):
                 employee_count = int(employee_count)
             except:
                 employee_count = None
+                
+        # Parse amount (Qualified Lead Revenue)
+        amount = properties.get("amount", "")
+        if amount:
+            try:
+                amount = str(amount).replace('$', '').replace(',', '')
+                amount = float(amount)
+            except:
+                amount = 0.0
+        else:
+            amount = 0.0
         
         # Extract COURSE/PROGRAM information
         course_info = ""
@@ -829,6 +937,7 @@ def process_contacts_data(contacts):
             "City": properties.get("city", ""),
             "Industry": properties.get("industry", ""),
             "Annual Revenue": annual_revenue,
+            "Revenue": amount,
             "Employee Count": employee_count,
             "Website": properties.get("website", ""),
             "Owner ID": properties.get("hubspot_owner_id", ""),
@@ -878,30 +987,20 @@ def build_course_quality_table(df):
     # Rename columns for consistency
     pivot = pivot.rename(columns={'Course_Clean': 'Course/Program'})
     
-    # Define required columns in specific order
-    required_columns = [
-        'Course/Program',
-        'Not Connected (NC)', 
-        'Not Interested', 
-        'Not Qualified',
-        'Cold', 
-        'Duplicate', 
-        'Warm', 
-        'Hot', 
-        'Future Prospect',
-        'Customer',
-        'New Lead',
-        'Upselling',
-        'Course Shifting'
-    ]
+    # Define required columns from our funnel order
+    required_columns = ['Course/Program'] + [status for status in LEAD_STATUS_ORDER if status != 'Unknown'] + ['Unknown']
     
     # Add missing columns with 0 values
     for col in required_columns:
         if col not in pivot.columns:
             pivot[col] = 0
+            
+    # Filter the required columns to only include those in the pivot
+    # to avoid KeyError if some funnel statuses don't appear in data
+    valid_cols = [col for col in required_columns if col in pivot.columns]
     
     # Reorder columns
-    pivot = pivot[required_columns]
+    pivot = pivot[valid_cols]
     
     # Calculate Quality Metrics
     pivot['Low Quality Leads'] = pivot['Not Interested'] + pivot['Not Qualified']
@@ -969,30 +1068,23 @@ def build_campaign_performance_table(df):
     required_columns = [
         'Traffic Source',
         'Campaign Name',
-        'Campaign Drilldown 2',  # 🔥 NEW LEVEL
-        'Cold',
-        'Warm',
-        'Hot',
-        'New Lead',
-        'Customer',
-        'Not Connected (NC)',
-        'Not Interested',
-        'Not Qualified',
-        'Duplicate',
-        'Upselling',
-        'Course Shifting'
-    ]
+        'Campaign Drilldown 2'
+    ] + [status for status in LEAD_STATUS_ORDER if status != 'Unknown'] + ['Unknown']
     
     # Add missing columns with 0 values
     for col in required_columns:
         if col not in pivot.columns:
             pivot[col] = 0
+            
+    # Filter the required columns to only include those in the pivot
+    # to avoid KeyError if some funnel statuses don't appear in data
+    valid_cols = [col for col in required_columns if col in pivot.columns]
     
     # Reorder columns
-    pivot = pivot[required_columns]
+    pivot = pivot[valid_cols]
     
     # Calculate Grand Total (sum of all lead status columns)
-    status_columns = [col for col in required_columns if col not in ['Traffic Source', 'Campaign Name', 'Campaign Drilldown 2']]
+    status_columns = [col for col in valid_cols if col not in ['Traffic Source', 'Campaign Name', 'Campaign Drilldown 2']]
     pivot['Grand Total'] = pivot[status_columns].sum(axis=1)
     
     # Calculate Quality Metrics
@@ -1017,8 +1109,11 @@ def analyze_lead_status_distribution(df):
     lead_status_dist = df['Lead Status'].value_counts().reset_index()
     lead_status_dist.columns = ['Lead Status', 'Count']
     
-    # Sort by count (descending)
-    lead_status_dist = lead_status_dist.sort_values('Count', ascending=False)
+    # Sort by Logical Funnel Order
+    lead_status_dist['Sort_Index'] = lead_status_dist['Lead Status'].apply(
+        lambda x: LEAD_STATUS_ORDER.index(x) if x in LEAD_STATUS_ORDER else len(LEAD_STATUS_ORDER)
+    )
+    lead_status_dist = lead_status_dist.sort_values('Sort_Index').drop('Sort_Index', axis=1)
     
     # Add "Grand Total" row at the end
     grand_total = lead_status_dist['Count'].sum()
@@ -1039,8 +1134,12 @@ def analyze_sub_lead_status_distribution(df):
         
     dist = sub_df.groupby(['Lead Status', 'Sub Lead Status']).size().reset_index(name='Count')
     
-    # Sort for better presentation
-    dist = dist.sort_values(['Lead Status', 'Count'], ascending=[True, False])
+    # Sort for better presentation based on Funnel Order
+    dist['Sort_Index'] = dist['Lead Status'].apply(
+        lambda x: LEAD_STATUS_ORDER.index(x) if x in LEAD_STATUS_ORDER else len(LEAD_STATUS_ORDER)
+    )
+    dist = dist.sort_values(['Sort_Index', 'Count'], ascending=[True, False]).drop('Sort_Index', axis=1)
+
     
     # Add Grand Total
     grand_total = dist['Count'].sum()
@@ -1623,10 +1722,10 @@ def main():
                 unsafe_allow_html=True
             )
             
-            # 🔥 ONLY 4 KPI METRICS (as requested)
+            # 🔥 KPIS IN 5 COLUMNS
             st.markdown("## 📈 Key Performance Indicators")
             
-            metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+            metric_col1, metric_col2, metric_col3, metric_col4, metric_col5 = st.columns(5)
             
             with metric_col1:
                 total_contacts = len(df)
@@ -1646,6 +1745,12 @@ def main():
                 course_count = df['Has Course'].sum()
                 course_percent = (course_count / len(df)) * 100 if len(df) > 0 else 0
                 st.metric("With Course", f"{course_count:,} ({course_percent:.1f}%)")
+                
+            with metric_col5:
+                # Calculate Qualified Revenue (Hot, Warm, Customer)
+                qualified_df = df[df['Lead Status'].isin(['Hot', 'Warm', 'Customer'])]
+                total_revenue = qualified_df['Revenue'].sum()
+                st.metric("Qualified Revenue", f"₹{total_revenue:,.0f}")
             
             st.divider()
             
@@ -1666,121 +1771,73 @@ def main():
                 
                 if st.session_state.analysis_results and 'lead_status_distribution' in st.session_state.analysis_results:
                     lead_status_data = st.session_state.analysis_results['lead_status_distribution']
+                    sub_lead_df = st.session_state.analysis_results.get('sub_lead_status_distribution', pd.DataFrame())
                     
                     if not lead_status_data.empty:
-                        col_b1, col_b2 = st.columns([2, 1])
+                        # 🔥 ADD FILTERS AT THE TOP
+                        st.markdown("#### 🔍 Filter View")
+                        col_f1, col_f2 = st.columns(2)
                         
-                        with col_b1:
-                            # Display the table EXACTLY like your example
-                            st.markdown("#### Lead Status Counts")
-                            st.dataframe(
-                                lead_status_data,
-                                use_container_width=True,
-                                height=400,
-                                column_config={
-                                    "Lead Status": st.column_config.TextColumn("Lead Status", width="medium"),
-                                    "Count": st.column_config.NumberColumn("Count", format="%d", width="small")
-                                }
-                            )
+                        unique_sources = sorted(df['Traffic Source'].dropna().unique()) if 'Traffic Source' in df.columns else []
+                        unique_dd2 = sorted(df['Campaign Drilldown 2'].dropna().unique()) if 'Campaign Drilldown 2' in df.columns else []
+                        
+                        with col_f1:
+                            selected_source = st.selectbox("Traffic Source:", ["All"] + list(unique_sources), key="ls_traffic_source")
+                        with col_f2:
+                            selected_dd2 = st.selectbox("Drill-Down 2:", ["All"] + list(unique_dd2), key="ls_drilldown_2")
+                        
+                        # Filter dataframe based on selections
+                        filtered_df = df.copy()
+                        if selected_source != "All":
+                            filtered_df = filtered_df[filtered_df['Traffic Source'] == selected_source]
+                        if selected_dd2 != "All":
+                            filtered_df = filtered_df[filtered_df['Campaign Drilldown 2'] == selected_dd2]
+                        
+                        # Re-calculate status and sub-status counts based on filtered data
+                        # We need to re-run the aggregation logic on the filtered dataframe
+                        if not filtered_df.empty:
+                            # Recalculate Lead Status distribution
+                            ls_counts = filtered_df['Lead Status'].value_counts().reset_index()
+                            ls_counts.columns = ['Lead Status', 'Count']
+                            ls_counts = ls_counts.sort_values('Count', ascending=False)
                             
-                            # Sub Lead Status display
-                            if 'sub_lead_status_distribution' in st.session_state.analysis_results:
-                                st.markdown("#### Sub Lead Status Counts")
-                                sub_lead_df = st.session_state.analysis_results['sub_lead_status_distribution']
-                                
-                                # Setup filter options (exclude Grand Total)
-                                available_lead_statuses = sorted(sub_lead_df[sub_lead_df['Lead Status'] != 'Grand Total']['Lead Status'].unique())
-                                
-                                # Add Multiselect filter for Sub Lead Status table
-                                selected_statuses_for_sub = st.multiselect(
-                                    "Filter by Lead Status:",
-                                    options=available_lead_statuses,
-                                    default=[]
-                                )
-                                
-                                # Filter dataframe based on selection
-                                if selected_statuses_for_sub:
-                                    # Always keep Grand Total if it exists, and the filtered rows
-                                    filtered_sub_lead_df = sub_lead_df[
-                                        sub_lead_df['Lead Status'].isin(selected_statuses_for_sub) | 
-                                        (sub_lead_df['Lead Status'] == 'Grand Total')
-                                    ].copy()
-                                    
-                                    # Recalculate Grand Total based on filtered data
-                                    if 'Grand Total' in filtered_sub_lead_df['Lead Status'].values:
-                                        # Remove old grand total to recalculate
-                                        filtered_sub_lead_df = filtered_sub_lead_df[filtered_sub_lead_df['Lead Status'] != 'Grand Total']
-                                        new_total = filtered_sub_lead_df['Count'].sum()
-                                        
-                                        # Append new grand total
-                                        total_row = pd.DataFrame({'Lead Status': ['Grand Total'], 'Sub Lead Status': [''], 'Count': [new_total]})
-                                        filtered_sub_lead_df = pd.concat([filtered_sub_lead_df, total_row], ignore_index=True)
-                                else:
-                                    filtered_sub_lead_df = sub_lead_df
-                                    
-                                st.dataframe(
-                                    filtered_sub_lead_df,
-                                    use_container_width=True,
-                                    height=300,
-                                    column_config={
-                                        "Lead Status": st.column_config.TextColumn("Lead Status", width="medium"),
-                                        "Sub Lead Status": st.column_config.TextColumn("Sub Lead Status", width="medium"),
-                                        "Count": st.column_config.NumberColumn("Count", format="%d", width="small")
-                                    }
-                                )
-                        
-                        with col_b2:
-                            # Download button
-                            csv_lead = lead_status_data.to_csv(index=False)
+                            # Filter Sub Lead Status
+                            sub_filtered = filtered_df[filtered_df['Sub Lead Status'].notna() & (filtered_df['Sub Lead Status'] != '')]
+                            if not sub_filtered.empty:
+                                sub_counts = sub_filtered.groupby(['Lead Status', 'Sub Lead Status']).size().reset_index(name='Count')
+                                sub_counts = sub_counts.sort_values(['Lead Status', 'Count'], ascending=[True, False])
+                            else:
+                                sub_counts = pd.DataFrame(columns=['Lead Status', 'Sub Lead Status', 'Count'])
+                            
+                            # Display Excel-Style Hierarchical View
+                            st.markdown(f"#### 📑 Excel-Style Drill-down View (+) - {len(filtered_df):,} Records")
+                            available_ls = ls_counts['Lead Status'].tolist()
+                            
+                            for status in available_ls:
+                                status_count = ls_counts[ls_counts['Lead Status'] == status]['Count'].sum()
+                                with st.expander(f"➕ {status} ({status_count:,})"):
+                                    sub_df_for_status = sub_counts[sub_counts['Lead Status'] == status][['Sub Lead Status', 'Count']]
+                                    if not sub_df_for_status.empty:
+                                        st.dataframe(sub_df_for_status, use_container_width=True, hide_index=True)
+                                    else:
+                                        st.info("No sub-lead statuses available for this category.")
+                            
+                            # Download option for filtered data
+                            st.divider()
+                            csv_filtered = filtered_df[['Lead Status', 'Sub Lead Status', 'Course/Program', 'Traffic Source', 'Campaign Drilldown 2']].to_csv(index=False)
                             st.download_button(
-                                "📥 Download Lead Status",
-                                csv_lead,
-                                "lead_status_distribution.csv",
-                                "text/csv",
-                                use_container_width=True
+                                "📥 Download Filtered Lead Status Data",
+                                csv_filtered,
+                                "filtered_lead_status.csv",
+                                "text/csv"
                             )
-                            
-                            # Quick stats
-                            # Exclude Grand Total for metrics
-                            data_for_metrics = lead_status_data[lead_status_data['Lead Status'] != 'Grand Total']
-                            total_leads = data_for_metrics['Count'].sum() if not data_for_metrics.empty else 0
-                            top_status = data_for_metrics.iloc[0]['Lead Status'] if len(data_for_metrics) > 0 else "N/A"
-                            top_count = data_for_metrics.iloc[0]['Count'] if len(data_for_metrics) > 0 else 0
-                            
-                            st.metric("Total Records", total_leads)
-                            st.metric("Top Status", top_status, delta=f"{top_count} records")
-                            
-                            # 🔍 DEBUG VIEW: Show raw vs normalized mapping
-                            with st.expander("🔍 View Data Normalization", expanded=False):
-                                if 'debug_mapping' in st.session_state.analysis_results:
-                                    debug_df = st.session_state.analysis_results['debug_mapping']
-                                    
-                                    st.markdown("**Raw vs Normalized Values**")
-                                    st.dataframe(debug_df, use_container_width=True, height=300)
-                                    
-                                    # Check for old values
-                                    old_values = ['neutral_prospect', 'prospect', 'hot_prospect']
-                                    has_old_values = any(debug_df['Lead Status Raw'].astype(str).str.lower().str.contains(val).any() for val in old_values)
-                                    
-                                    if has_old_values:
-                                        st.success("✅ Old values detected and successfully normalized!")
-                                        st.info("Old values (neutral_prospect, prospect, hot_prospect) are now merged into Cold, Warm, and Hot categories.")
-                            
-                            # Pie chart
-                            if len(data_for_metrics) > 0:
-                                fig = px.pie(
-                                    data_for_metrics.head(8),
-                                    values='Count',
-                                    names='Lead Status',
-                                    title="Lead Status Distribution",
-                                    hole=0.3
-                                )
-                                fig.update_traces(textposition='inside', textinfo='percent+label')
-                                st.plotly_chart(fig, use_container_width=True)
+                        else:
+                            st.warning("No data found for the selected filter combination.")
                     else:
                         st.info("No lead status data available")
                 else:
                     st.info("No lead status analysis available")
+
             
             with tab2:  # COURSE DISTRIBUTION
                 st.markdown("### 📚 Course/Program Distribution")
