@@ -2180,7 +2180,7 @@ def main():
                             st.markdown(f'<span class="traffic-badge">{source}: {count}</span>', unsafe_allow_html=True)
                         
                         # Drill-Down 2 badges (if applicable)
-                        if selected_source != "All Traffic Sources" and not filtered_df.empty:
+                        if selected_sources and not filtered_df.empty:
                             dd2_counts = filtered_df['Campaign Drilldown 2'].value_counts()
                             if len(dd2_counts) > 0:
                                 st.markdown("**Drill-Down 2 Values:**")
